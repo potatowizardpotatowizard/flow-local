@@ -12,8 +12,10 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 
 echo ""
-echo "Done. To start dictating, run:"
+echo "Done. Next, build the menu bar app:"
 echo ""
-echo "    bash run.sh"
+echo "    bash make_app.sh"
+echo ""
+echo "(or run terminal-only with: bash run.sh)"
 echo ""
 echo "The first run downloads the Whisper model (~480MB), then it's fully offline."

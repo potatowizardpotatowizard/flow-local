@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime files
+.flow-local.lock
+
+# Personal settings — config.json holds your vocabulary, corrections, and
+# personal names, so it stays out of the repo. Flow Local recreates it
+# with defaults on first run.
+config.json

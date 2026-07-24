@@ -1,83 +1,169 @@
 # Flow Local
 
-Hold-to-talk dictation for macOS — fully offline, no accounts, no subscription.
+**Offline dictation for macOS.** Hold a key, speak, release — your words are
+transcribed on-device with Whisper, cleaned up, and typed into whatever app
+is in front. Email, Slack, docs, code review comments, anywhere.
 
-Hold **Right Option**, speak, release. Your words are transcribed locally with
-Whisper, cleaned up (filler words removed, punctuation fixed), and typed into
-whatever app is in front — email, Slack, docs, anywhere.
+- 🔒 **Fully private** — audio never leaves your Mac. No cloud, no account,
+  no API key, no subscription, no telemetry. Unplug your network and it
+  still works.
+- 🎙 **Lives in the menu bar** — hold **Right Option** to talk, or
+  double-tap it to lock recording on hands-free.
+- 🧹 **Cleans as it types** — strips "um"/"uh", collapses stutters, converts
+  spoken punctuation ("comma", "period", "new paragraph"), fixes
+  capitalization, applies your personal auto-corrections.
+- 🗣 **Knows your words** — teach it names and jargon in a personal
+  dictionary so Whisper stops mangling them.
+- ↩️ **"Scratch that"** — say it to erase the last dictation.
 
-Total disk footprint: about 1GB (mostly the Whisper model). Nothing ever
-leaves your Mac.
+Total footprint is about 1 GB, mostly the Whisper model.
 
-## Setup (one time, ~5 minutes)
+## Install (from a fresh clone, ~5 minutes)
 
-1. Put this folder somewhere permanent (e.g. `~/flow-local`).
+Requires macOS and Python 3.9+ (`xcode-select --install` if macOS asks for
+developer tools).
 
-2. Open Terminal, then run:
+```bash
+git clone <your-fork-or-this-repo> ~/flow-local
+cd ~/flow-local
+bash setup.sh      # creates .venv and installs dependencies
+bash make_app.sh   # builds "Flow Local.app" in ~/Applications + Login Items
+open ~/Applications/"Flow Local.app"
+```
 
-   ```
-   cd ~/flow-local
-   bash setup.sh
-   ```
+The first launch downloads the default Whisper model (~480 MB); after that
+it is fully offline. A 🎙 icon appears in the menu bar when it's ready.
 
-   If macOS says developer tools are missing, run `xcode-select --install`
-   first, then re-run the setup.
+Prefer no app bundle? `bash run.sh` runs the same engine in a terminal.
 
-3. Start it:
+### Permissions walkthrough (one time)
 
-   ```
-   bash run.sh
-   ```
+macOS will prompt for two permissions the first time; if a prompt doesn't
+appear, grant them manually in **System Settings → Privacy & Security** for
+**Flow Local** (or **Terminal** when using `run.sh`):
 
-   The first run downloads the Whisper model (~480MB). After that it works
-   with no internet at all.
+1. **Microphone** — to hear you.
+2. **Accessibility** — to type the text into other apps (and to watch for
+   the hotkey).
 
-4. **Grant permissions.** macOS will prompt you the first time; if it doesn't,
-   go to **System Settings → Privacy & Security** and enable **Terminal** under
-   each of these three sections:
+After granting Accessibility, quit and reopen the app once (menu bar 🎙 →
+Quit Flow Local, then relaunch). The terminal mode additionally needs
+**Input Monitoring** for its hotkey listener.
 
-   - **Microphone** — to hear you
-   - **Input Monitoring** — to detect the hotkey
-   - **Accessibility** — to type the text into other apps
-
-   After granting Accessibility or Input Monitoring you may need to quit and
-   reopen Terminal once.
+> `make_app.sh` always builds with the same name and bundle id
+> (`local.flow.dictation`), so rebuilding never resets your permissions.
 
 ## Using it
 
-Keep the Terminal window running (minimize it if you like). In any app:
-
-- **Hold Right Option** and speak.
-- **Release** — a moment later the text appears where your cursor is.
-
-You'll hear a soft pop when recording starts and a click when it stops.
-Quit with Ctrl-C in the Terminal window.
-
-## Tweaking
-
-Open `flow_local.py` — all settings are at the top:
-
-| Setting | What it does |
+| Action | How |
 |---|---|
-| `MODEL_SIZE` | `tiny.en` (fastest) → `medium.en` (most accurate). Default `small.en` is the sweet spot. Use `small` (no `.en`) for non-English. |
-| `HOTKEY` | Which key to hold. Default `alt_r` (Right Option). |
-| `APPEND_SPACE` | Add a trailing space after each dictation. |
-| `PLAY_SOUNDS` | Start/stop sounds on or off. |
-| `FILLER_PATTERN` | Which filler words get stripped. |
+| Dictate | Hold **Right Option**, speak, release |
+| Hands-free mode | **Double-tap** Right Option to lock recording on (icon shows 🔴🔒); tap once to stop and transcribe |
+| Erase last dictation | Say **"scratch that"** (or "delete that") |
+| Spoken punctuation | Say "comma", "period", "question mark", "new line", "new paragraph", … |
+| Re-copy an old dictation | Menu bar 🎙 → **History** → click an entry (copies to clipboard) |
+| Switch model | Menu bar 🎙 → **Model** (downloads on first use, no restart needed) |
+| Change settings | Menu bar 🎙 → **Open Settings file**, edit, then **Reload settings** |
+| Start at login | Menu bar 🎙 → **Launch at Login** |
+
+Menu bar icon states: 🎙 ready · 🔴 recording · 🔴🔒 locked recording ·
+💬 transcribing · ⏳ loading a model · ⚠️ error (the reason appears as the
+first menu item).
+
+The **Session** line in the menu shows words dictated and roughly how many
+minutes of typing you saved (against a 40 wpm typing speed — set
+`typing_wpm` to yours).
+
+## Settings reference (`config.json`)
+
+All settings live in `config.json` next to the scripts, created with these
+defaults on first run. Edit it (menu → Open Settings file), then use
+**Reload settings** — no restart needed.
+
+| Key | Default | What it does |
+|---|---|---|
+| `hotkey` | `"alt_r"` | Push-to-talk key: `alt_r`, `alt_l`, `cmd_r`, `ctrl_r`, or `f13`–`f20`. |
+| `model_size` | `"small.en"` | Whisper model: `tiny.en` (fastest) → `medium.en` (most accurate). Use `small` (no `.en`) for non-English. |
+| `play_sounds` | `true` | Soft pop/click when recording starts, locks, and stops. |
+| `append_space` | `true` | Add a trailing space after each dictation. |
+| `min_seconds` | `0.4` | Ignore recordings shorter than this (accidental taps). |
+| `double_tap_seconds` | `0.5` | Two taps within this window lock recording on. |
+| `tap_seconds` | `0.3` | A press shorter than this counts as a tap, not a hold. |
+| `typing_wpm` | `40` | Your typing speed, for the "minutes saved" stat. |
+| `fillers` | `["um", "uh", …]` | Words to strip. Each also matches with a stretched last letter ("ummm"). |
+| `spoken_punctuation` | `{"comma": ",", …}` | Say the key, get the value. Add your own (`"smiley": "🙂"`). Values may contain `\n`. |
+| `vocabulary` | `[]` | Names/jargon hinted to Whisper so it recognizes them, e.g. `["Benjiman", "kubectl"]`. |
+| `corrections` | `{}` | Forced post-fixes, e.g. `{"cloud code": "Claude Code"}`. Case-insensitive, whole words. |
+
+`config.json` is `.gitignore`d because it tends to accumulate personal
+names and vocabulary; a fresh clone regenerates the defaults.
 
 ## Troubleshooting
 
-- **Nothing types, but the transcript shows in Terminal** → Accessibility
-  permission is missing (or Terminal needs a restart after granting it).
-- **Hotkey does nothing** → Input Monitoring permission is missing.
-- **"no speech detected"** → Microphone permission is missing, or the wrong
-  input device is selected in System Settings → Sound → Input.
-- **Transcription feels slow** → switch `MODEL_SIZE` to `base.en` or `tiny.en`.
-- **Clipboard note** → the script pastes via the clipboard and restores your
-  previous clipboard text afterwards. Images/files on the clipboard are not
-  restored — only plain text.
+- **⚠️ in the menu bar** — click it; the first menu line says what went
+  wrong (mic unavailable, model download failed, paste blocked, broken
+  config.json).
+- **Nothing types, but History shows the text** — Accessibility permission
+  is missing, or the app needs one restart after you granted it.
+- **Hotkey does nothing** — Accessibility permission (Input Monitoring for
+  terminal mode). Also check `hotkey` in config.json is a supported name.
+- **"no speech detected"** — Microphone permission, or the wrong input
+  device in System Settings → Sound → Input.
+- **Slow transcription** — switch to `base.en` or `tiny.en` in the Model
+  menu.
+- **It typed "period" literally** — spoken-punctuation words are converted
+  only when they appear as standalone words; if you dictate a sentence that
+  *uses* the word ("the trial period ends"), Whisper's own punctuation
+  usually wins, but rule-based conversion can occasionally guess wrong.
+  Remove any entry from `spoken_punctuation` you don't want converted.
+- **Clipboard** — text is inserted via the clipboard; your previous
+  clipboard *text* is restored afterwards (images/files are not).
+- **Two icons / double-typed text** — can't happen anymore: a second launch
+  exits quietly (single-instance lock).
+
+## How it compares to Wispr Flow
+
+Honest version: [Wispr Flow](https://wisprflow.ai) is a polished commercial
+product with cloud-scale accuracy, AI rewriting/tone matching, context
+awareness across apps, team features, and support. Flow Local is a few
+hundred lines of Python.
+
+What you get here instead:
+
+- **Privacy**: your audio and text never leave the machine. Wispr Flow
+  processes audio in the cloud.
+- **Price**: free and MIT-licensed vs. a subscription.
+- **Offline**: works on a plane.
+- **Hackable**: every behavior is a readable Python function or a
+  config.json key.
+
+What you give up: accuracy beyond what local Whisper models offer (medium.en
+is good, not magical), AI-powered rewriting/formatting, per-app tone,
+multi-language auto-detection, mobile keyboards, and someone to email when
+it breaks. If dictation is mission-critical for you, try both.
 
 ## Uninstalling
 
-Delete the folder, and delete the downloaded model at
-`~/.cache/huggingface/hub` if you want the ~480MB back. That's it.
+Quit the app, then:
+
+```bash
+rm -rf ~/Applications/"Flow Local.app" ~/flow-local
+rm -rf ~/.cache/huggingface/hub   # the downloaded Whisper models
+```
+
+and remove "Flow Local" from Login Items if you enabled it.
+
+## Development
+
+```bash
+.venv/bin/python -m pytest        # run the test suite
+```
+
+`flow_local.py` is the engine (audio, Whisper, text cleanup, hotkey state
+machine); `flow_menubar.py` is the menu bar UI on top of it; `make_app.sh`
+wraps the latter in a minimal .app bundle. Tests cover the text pipeline
+and config handling — everything that doesn't need a microphone.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
