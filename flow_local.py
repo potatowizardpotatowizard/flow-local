@@ -58,6 +58,12 @@ DEFAULT_SETTINGS = {
     # Filler words to strip. Each one also matches with its last letter
     # stretched out ("um" also matches "umm", "ummm", ...).
     "fillers": ["um", "uh", "uhm", "erm", "hmm", "mm-hmm", "mmm"],
+    # How to treat spoken punctuation words:
+    #   "smart"  - convert, but leave the word alone when it's clearly used
+    #              as a noun ("the trial period ends", "an Oxford comma")
+    #   "always" - convert every occurrence
+    #   "off"    - never convert
+    "spoken_punctuation_mode": "smart",
     # Say the word on the left, get the symbol on the right.
     "spoken_punctuation": {
         "comma": ",",
@@ -121,6 +127,39 @@ def _filler_regex(fillers):
     return r"\b(?:" + "|".join(parts) + r")\b"
 
 
+# Words that mark a spoken-punctuation word as a real noun when they appear
+# right before it ("a period", "in that period", "an Oxford comma").
+_DETERMINERS = {
+    "the", "a", "an", "this", "that", "these", "those",
+    "my", "your", "his", "her", "its", "our", "their",
+    "each", "every", "per", "one", "no", "any", "some", "another",
+}
+# Two words back, only articles/possessives are trustworthy ("the trial
+# period ends") — "this"/"that" there is usually a pronoun ("that works
+# period" is a command).
+_ARTICLES = {
+    "the", "a", "an",
+    "my", "your", "his", "her", "its", "our", "their",
+}
+
+
+def _meant_literally(match):
+    """True when a spoken-punctuation word is probably meant as a word.
+
+    Rules, in order:
+      1. A determiner immediately before -> literal ("in a period").
+      2. Nothing after it (end of dictation) -> punctuation ("close it period").
+      3. A determiner two words back -> literal ("the trial period ends").
+      4. Otherwise -> punctuation.
+    """
+    before_words = re.findall(r"[A-Za-z']+", match.string[: match.start()])[-2:]
+    if before_words and before_words[-1].lower() in _DETERMINERS:
+        return True
+    if not re.search(r"[A-Za-z]", match.string[match.end():]):
+        return False
+    return len(before_words) == 2 and before_words[0].lower() in _ARTICLES
+
+
 def clean_text(text, settings=None):
     """Rule-based cleanup: spoken punctuation, fillers, spacing, capitals."""
     s = settings if settings is not None else DEFAULT_SETTINGS
@@ -130,11 +169,19 @@ def clean_text(text, settings=None):
 
     # Spoken punctuation: "comma" -> "," etc. Longest phrases first so
     # "question mark" wins before any shorter overlap. Newline values
-    # become placeholders until the very end.
-    punct = s.get("spoken_punctuation", {})
+    # become placeholders until the very end. In "smart" mode (default),
+    # words that look like real nouns are left alone — see _meant_literally.
+    mode = s.get("spoken_punctuation_mode", "smart")
+    punct = s.get("spoken_punctuation", {}) if mode != "off" else {}
     for phrase in sorted(punct, key=len, reverse=True):
         symbol = punct[phrase].replace("\n", _NL)
-        text = re.sub(r"\b" + re.escape(phrase) + r"\b", symbol, text, flags=re.IGNORECASE)
+
+        def _replace(match, _symbol=symbol):
+            if mode == "smart" and _meant_literally(match):
+                return match.group(0)
+            return _symbol
+
+        text = re.sub(r"\b" + re.escape(phrase) + r"\b", _replace, text, flags=re.IGNORECASE)
 
     # Remove filler words along with the commas that set them off
     # ("we should, um, move" -> "we should move")

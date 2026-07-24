@@ -92,6 +92,7 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `typing_wpm` | `40` | Your typing speed, for the "minutes saved" stat. |
 | `fillers` | `["um", "uh", …]` | Words to strip. Each also matches with a stretched last letter ("ummm"). |
 | `spoken_punctuation` | `{"comma": ",", …}` | Say the key, get the value. Add your own (`"smiley": "🙂"`). Values may contain `\n`. |
+| `spoken_punctuation_mode` | `"smart"` | `smart` converts spoken punctuation but leaves obvious noun uses alone ("the trial period ends", "an Oxford comma"). `always` converts every occurrence; `off` disables conversion. |
 | `vocabulary` | `[]` | Names/jargon hinted to Whisper so it recognizes them, e.g. `["Benjiman", "kubectl"]`. |
 | `corrections` | `{}` | Forced post-fixes, e.g. `{"cloud code": "Claude Code"}`. Case-insensitive, whole words. |
 
@@ -111,11 +112,13 @@ names and vocabulary; a fresh clone regenerates the defaults.
   device in System Settings → Sound → Input.
 - **Slow transcription** — switch to `base.en` or `tiny.en` in the Model
   menu.
-- **It typed "period" literally** — spoken-punctuation words are converted
-  only when they appear as standalone words; if you dictate a sentence that
-  *uses* the word ("the trial period ends"), Whisper's own punctuation
-  usually wins, but rule-based conversion can occasionally guess wrong.
-  Remove any entry from `spoken_punctuation` you don't want converted.
+- **It typed "period" literally (or turned it into a ".") when you meant
+  the opposite** — the default `smart` mode guesses from context: a
+  determiner right before the word ("in **a** period", "**the** trial
+  period ends") keeps it literal, everything else converts. It can guess
+  wrong on unusual phrasing. Set `spoken_punctuation_mode` to `always` or
+  `off` to remove the guessing, or delete individual entries from
+  `spoken_punctuation`.
 - **Clipboard** — text is inserted via the clipboard; your previous
   clipboard *text* is restored afterwards (images/files are not).
 - **Two icons / double-typed text** — can't happen anymore: a second launch

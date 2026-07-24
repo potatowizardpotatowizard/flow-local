@@ -54,6 +54,38 @@ def test_whispers_own_punctuation_does_not_double_up():
 def test_stray_period_after_spoken_new_paragraph():
     assert clean_text("first new paragraph. second") == "First\nSecond".replace("\n", "\n\n")
 
+# ── Smart punctuation mode (infers word vs. command) ────────────────────
+
+def test_noun_use_with_determiner_kept():
+    assert clean_text("it ends in a period") == "It ends in a period"
+
+def test_noun_phrase_with_determiner_two_back_kept():
+    assert clean_text("the trial period ends tomorrow") == (
+        "The trial period ends tomorrow"
+    )
+
+def test_oxford_comma_kept():
+    assert clean_text("use an Oxford comma here") == "Use an Oxford comma here"
+
+def test_command_at_end_after_noun_still_converts():
+    assert clean_text("close the door period") == "Close the door."
+
+def test_command_mid_sentence_still_converts():
+    assert clean_text("that works period let's ship it") == (
+        "That works. Let's ship it"
+    )
+
+def test_always_mode_converts_everything():
+    settings = dict(DEFAULT_SETTINGS)
+    settings["spoken_punctuation_mode"] = "always"
+    assert clean_text("the trial period ends", settings) == "The trial. Ends"
+
+def test_off_mode_converts_nothing():
+    settings = dict(DEFAULT_SETTINGS)
+    settings["spoken_punctuation_mode"] = "off"
+    assert clean_text("hello comma world", settings) == "Hello comma world"
+
+
 def test_custom_punctuation_map():
     settings = dict(DEFAULT_SETTINGS)
     settings["spoken_punctuation"] = {"smiley": "🙂"}
