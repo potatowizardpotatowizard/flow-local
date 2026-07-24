@@ -543,10 +543,41 @@ def play_sound(name, settings):
         )
 
 
+def _accessibility_granted():
+    """Whether this process may synthesize keystrokes (Accessibility)."""
+    try:
+        from ApplicationServices import AXIsProcessTrusted
+        return bool(AXIsProcessTrusted())
+    except Exception:
+        return True  # can't check — try anyway
+
+
+def _press_key(keycode, command=False):
+    """Synthesize one keystroke via CoreGraphics.
+
+    This posts the event from Flow Local itself, so it needs only the
+    Accessibility permission — unlike osascript/System Events, which
+    additionally needs the separate Automation permission.
+    """
+    from Quartz import (
+        CGEventCreateKeyboardEvent,
+        CGEventPost,
+        CGEventSetFlags,
+        kCGEventFlagMaskCommand,
+        kCGHIDEventTap,
+    )
+
+    for is_down in (True, False):
+        event = CGEventCreateKeyboardEvent(None, keycode, is_down)
+        if command:
+            CGEventSetFlags(event, kCGEventFlagMaskCommand)
+        CGEventPost(kCGHIDEventTap, event)
+
+
 def paste_text(text, settings):
     """Insert text into the frontmost app via clipboard + Cmd-V.
 
-    Returns the exact string inserted, or None if macOS blocked the
+    Returns the exact string inserted, or None if macOS would block the
     keystroke (missing Accessibility permission). The previous clipboard
     contents (plain text) are restored afterwards on success; on failure
     the text is left on the clipboard so you can paste it yourself.
@@ -556,16 +587,9 @@ def paste_text(text, settings):
 
     old = subprocess.run(["pbpaste"], capture_output=True).stdout
     subprocess.run(["pbcopy"], input=text.encode("utf-8"))
-    result = subprocess.run(
-        [
-            "osascript",
-            "-e",
-            'tell application "System Events" to keystroke "v" using command down',
-        ],
-        capture_output=True,
-    )
-    if result.returncode != 0:
+    if not _accessibility_granted():
         return None
+    _press_key(9, command=True)  # keycode 9 = "v"
     # Give the paste a moment to land before restoring the clipboard
     time.sleep(0.4)
     subprocess.run(["pbcopy"], input=old)
@@ -574,20 +598,12 @@ def paste_text(text, settings):
 
 def send_backspaces(count):
     """Press Delete `count` times in the frontmost app (for "scratch that")."""
-    count = min(count, 500)  # safety cap
-    result = subprocess.run(
-        [
-            "osascript",
-            "-e",
-            'tell application "System Events"\n'
-            f"repeat {count} times\n"
-            "key code 51\n"
-            "end repeat\n"
-            "end tell",
-        ],
-        capture_output=True,
-    )
-    return result.returncode == 0
+    if not _accessibility_granted():
+        return False
+    for _ in range(min(count, 500)):  # safety cap
+        _press_key(51)  # keycode 51 = delete
+        time.sleep(0.005)  # keep the ordering reliable
+    return True
 
 
 def acquire_single_instance_lock():
