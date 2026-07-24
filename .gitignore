@@ -17,3 +17,7 @@ learned_words.json
 
 # Generated at build time by make_icon.py
 icon.icns
+
+# Local-only companion experiments - never publish these
+flowmaxxing/
+pinch_poc.py
