@@ -17,6 +17,9 @@ is in front. Email, Slack, docs, code review comments, anywhere.
   dictate are remembered (locally, in `learned_words.json`) and hinted
   back to Whisper, so recognition of *your* vocabulary improves with use.
 - ↩️ **"Scratch that"** — say it to erase the last dictation.
+- 📋 **Nowhere to type? Clipboard.** — dictate with no text field focused
+  (say, from the desktop) and the text lands on your clipboard with a
+  notification, instead of vanishing into nowhere.
 - ✏️ **Learns from your edits** — backspace part of a fresh dictation and
   retype it (say "dot dot dot", replace the literal words with `...`) and
   that fix becomes an automatic rule from then on. You get a notification,
@@ -112,6 +115,7 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `model_size` | `"small.en"` | Whisper model: `tiny.en` (fastest) → `medium.en` (most accurate). Use `small` (no `.en`) for non-English. |
 | `play_sounds` | `true` | Soft pop/click when recording starts, locks, and stops. |
 | `keep_mic_open` | `false` | `false`: mic is on only while recording (orange indicator = actually listening). `true`: keep the stream open for instant recording start. |
+| `copy_when_no_text_field` | `true` | If nothing editable has keyboard focus when a dictation finishes, copy the text to the clipboard and show a notification instead of typing. `false`: always attempt to type. |
 | `append_space` | `true` | Add a trailing space after each dictation. |
 | `min_seconds` | `0.4` | Ignore recordings shorter than this (accidental taps). |
 | `double_tap_seconds` | `0.5` | Two taps within this window lock recording on. |

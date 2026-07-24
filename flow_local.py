@@ -95,6 +95,10 @@ DEFAULT_SETTINGS = {
     # Forced fixes applied after transcription (case-insensitive match).
     # Example: {"cloud code": "Claude Code"}
     "corrections": {},
+    # When no text field is focused (e.g. you're just on the desktop),
+    # keep the dictation on the clipboard and show a notification instead
+    # of typing into nowhere. Set false to always attempt the paste.
+    "copy_when_no_text_field": True,
     # Learn corrections from your edits: if you backspace part of a fresh
     # dictation and retype it, the fix becomes a `corrections` rule
     # (e.g. say "dot dot dot", replace the literal words with "...", and
@@ -548,6 +552,54 @@ def play_sound(name, settings):
         )
 
 
+def _osascript_quote(text):
+    """Escape text for embedding in an AppleScript double-quoted string."""
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def show_notification(title, message):
+    subprocess.run(
+        ["osascript", "-e",
+         f'display notification "{_osascript_quote(message)}" '
+         f'with title "{_osascript_quote(title)}"'],
+        capture_output=True,
+    )
+
+
+def focused_element_is_editable():
+    """Whether keyboard focus is in something that accepts typed text.
+
+    Uses the Accessibility API: a real text field/area role counts, and so
+    does any focused element whose value can be written. Returns True when
+    it can't tell, so dictation behaves as before (types) rather than
+    silently diverting to the clipboard.
+    """
+    try:
+        from AppKit import NSWorkspace
+        from ApplicationServices import (
+            AXUIElementCopyAttributeValue,
+            AXUIElementCreateApplication,
+            AXUIElementIsAttributeSettable,
+        )
+
+        front = NSWorkspace.sharedWorkspace().frontmostApplication()
+        if front is None:
+            return True
+        app = AXUIElementCreateApplication(front.processIdentifier())
+        err, focused = AXUIElementCopyAttributeValue(app, "AXFocusedUIElement", None)
+        if err != 0 or focused is None:
+            return False  # nothing focused at all — desktop, empty space
+        err, role = AXUIElementCopyAttributeValue(focused, "AXRole", None)
+        if err == 0 and role in (
+            "AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"
+        ):
+            return True
+        err, settable = AXUIElementIsAttributeSettable(focused, "AXValue", None)
+        return err == 0 and bool(settable)
+    except Exception:
+        return True
+
+
 def _accessibility_granted():
     """Whether this process may synthesize keystrokes (Accessibility)."""
     try:
@@ -858,6 +910,21 @@ class FlowEngine:
             return
 
         text = tidy_spacing(apply_corrections(text, self.settings.get("corrections", {})))
+
+        # Nowhere to type? Keep it on the clipboard and say so.
+        if self.settings.get("copy_when_no_text_field", True) and not focused_element_is_editable():
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"))
+            preview = text if len(text) <= 60 else text[:60] + "…"
+            show_notification("Flow Local — copied to clipboard", f"“{preview}”")
+            self._last_pasted = ""  # nothing on screen for "scratch that"
+            self._clear_error()
+            self._remember(text, duration)
+            if self.settings.get("auto_learn_vocabulary", True):
+                learn_words(self.learned, text, self._system_dict, self.settings)
+                save_learned_words(self.learned)
+            self._set_state("ready")
+            self.on_event("result", f'copied "{text}" to clipboard')
+            return
 
         inserted = paste_text(text, self.settings)
         if inserted is None:

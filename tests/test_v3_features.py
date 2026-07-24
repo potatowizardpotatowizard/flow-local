@@ -166,6 +166,10 @@ def test_newly_introduced_settings_written_back(tmp_path, monkeypatch):
     assert on_disk["auto_learn_vocabulary"] is True        # new key now visible
     assert on_disk["spoken_punctuation_mode"] == "smart"
 
+def test_osascript_quoting():
+    from flow_local import _osascript_quote
+    assert _osascript_quote('say "hi" \\ bye') == 'say \\"hi\\" \\\\ bye'
+
 def test_broken_config_returns_defaults_and_error(tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text("{ this is not json")
