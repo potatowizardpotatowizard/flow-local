@@ -307,6 +307,7 @@ class FlowEngine:
         self.on_event = on_event or (lambda kind, msg: None)
 
         self.state = "loading"
+        self.state_detail = ""  # human-readable detail for the current state
         self.error_message = ""
         self.history = []
         self.history_version = 0  # bump so the UI knows to rebuild its menu
@@ -335,6 +336,7 @@ class FlowEngine:
     # ── events / state ──
     def _set_state(self, state, message=""):
         self.state = state
+        self.state_detail = message
         if state == "error":
             self.error_message = message
         self.on_event("state", message)
