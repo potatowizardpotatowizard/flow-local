@@ -47,7 +47,7 @@ def test_spoken_punctuation_is_case_insensitive():
     assert clean_text("Hello Comma world") == "Hello, world"
 
 def test_whispers_own_punctuation_does_not_double_up():
-    # Whisper often writes "Hello, comma world" — the spoken comma should
+    # Whisper often writes "Hello, comma world" - the spoken comma should
     # not produce a second one.
     assert clean_text("Hello, comma world") == "Hello, world"
 

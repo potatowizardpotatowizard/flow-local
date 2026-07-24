@@ -1,5 +1,5 @@
 # Tests that pin down the clean_text() behavior Flow Local has always had.
-# If these break, dictation output changed — investigate before shipping.
+# If these break, dictation output changed - investigate before shipping.
 
 import os
 import sys

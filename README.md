@@ -1,32 +1,32 @@
 # Flow Local
 
-**Offline dictation for macOS.** Hold a key, speak, release — your words are
+**Offline dictation for macOS.** Hold a key, speak, release - your words are
 transcribed on-device with Whisper, cleaned up, and typed into whatever app
 is in front. Email, Slack, docs, code review comments, anywhere.
 
-- 🔒 **Fully private** — audio never leaves your Mac. No cloud, no account,
+- 🔒 **Fully private**: audio never leaves your Mac. No cloud, no account,
   no API key, no subscription, no telemetry. Unplug your network and it
   still works.
-- 🎙 **Lives in the menu bar** — hold **Right Option** to talk, or
+- 🎙 **Lives in the menu bar**: hold **Right Option** to talk, or
   double-tap it to lock recording on hands-free.
-- 🧹 **Cleans as it types** — strips "um"/"uh", collapses stutters, converts
+- 🧹 **Cleans as it types**: strips "um"/"uh", collapses stutters, converts
   spoken punctuation ("comma", "period", "new paragraph"), fixes
   capitalization, applies your personal auto-corrections.
-- 🗣 **Knows your words** — teach it names and jargon in a personal
+- 🗣 **Knows your words**: teach it names and jargon in a personal
   dictionary, and it also **learns automatically**: unusual words you
   dictate are remembered (locally, in `learned_words.json`) and hinted
   back to the local speech model, so recognition of *your* vocabulary
   improves with use.
-- ↩️ **"Scratch that"** — say it to erase the last dictation.
-- 📋 **Nowhere to type? Clipboard.** — dictate with no text field focused
+- ↩️ **"Scratch that"**: say it to erase the last dictation.
+- 📋 **Nowhere to type? Clipboard.** Dictate with no text field focused
   (say, from the desktop) and the text lands on your clipboard with a
   notification, instead of vanishing into nowhere.
-- ✏️ **Learns from your edits** — backspace part of a fresh dictation and
+- ✏️ **Learns from your edits**: backspace part of a fresh dictation and
   retype it (say "dot dot dot", replace the literal words with `...`) and
   that fix becomes an automatic rule from then on. You get a notification,
   and the rule is visible in `config.json` under `corrections`.
 
-Total footprint is about 1 GB — mostly the Whisper speech model, which is
+Total footprint is about 1 GB - mostly the Whisper speech model, which is
 downloaded **once** and then runs entirely on your Mac. (Whisper is
 OpenAI's open-source speech-recognition model: this app uses a local copy
 of the model file, not any OpenAI service. The repo itself is just a few
@@ -55,29 +55,29 @@ Prefer no app bundle? `bash run.sh` runs the same engine in a terminal.
 Flow Local needs exactly two macOS permissions, and the app walks you
 through them. Here's what to expect on first launch, in order:
 
-1. **Accessibility** — lets Flow Local type text into other apps. The
+1. **Accessibility**: lets Flow Local type text into other apps. The
    first launch pops up macOS's own dialog: click **Open System
    Settings**, find **Flow Local** in the Accessibility list, and switch
    it on (macOS asks for your password/Touch ID). Missed the dialog? Go
    to **System Settings → Privacy & Security → Accessibility** manually.
 2. **Restart the app once.** Permissions only apply to a freshly started
    app: click the menu bar **🎙 → Quit Flow Local**, then reopen it from
-   Spotlight. This step is not optional — skipping it is the #1 reason
+   Spotlight. This step is not optional - skipping it is the #1 reason
    for "it transcribes but nothing gets typed."
-3. **Microphone** — macOS asks the first time you actually record
+3. **Microphone**: macOS asks the first time you actually record
    (hold the hotkey and speak). Click Allow.
 
 Good to know, so nothing surprises you:
 
-- Opening the app shows **no window and no Dock icon** — it lives
+- Opening the app shows **no window and no Dock icon**: it lives
   entirely in the menu bar (the 🎙 at the top-right of your screen).
   Opening it a second time just shows an "already running" notification.
 - The **orange microphone indicator** appears only while you're actually
-  dictating — the mic is opened when you press the hotkey and fully
+  dictating - the mic is opened when you press the hotkey and fully
   released when you stop. (If you'd rather shave ~0.2s off the recording
   start, set `keep_mic_open` to `true`; the indicator then stays on, but
   audio is still discarded except while recording.)
-- If the menu bar icon shows **⚠️**, click it — the first menu line
+- If the menu bar icon shows **⚠️**, click it - the first menu line
   states the exact problem, and it's almost always the Accessibility
   permission or the missing restart from step 2.
 - `make_app.sh` always builds with the same name and bundle id
@@ -94,7 +94,7 @@ Good to know, so nothing surprises you:
 | Dictate | Hold **Right Option**, speak, release |
 | Hands-free mode | **Double-tap** Right Option to lock recording on (icon shows 🔴🔒); tap once to stop and transcribe |
 | Erase last dictation | Say **"scratch that"** (or "delete that") |
-| Spoken punctuation | Say "comma", "period", "question mark", "new line", "new paragraph", … |
+| Spoken punctuation | Say "comma", "period", "question mark", "new line", "new paragraph", etc. |
 | Re-copy an old dictation | Menu bar 🎙 → **History** → click an entry (copies to clipboard) |
 | Switch model | Menu bar 🎙 → **Model** (downloads on first use, no restart needed) |
 | Change settings | Menu bar 🎙 → **Open Settings file**, edit, then **Reload settings** |
@@ -105,14 +105,14 @@ Menu bar icon states: 🎙 ready · 🔴 recording · 🔴🔒 locked recording 
 first menu item).
 
 The **Session** line in the menu shows words dictated and roughly how many
-minutes of typing you saved (against a 40 wpm typing speed — set
+minutes of typing you saved (against a 40 wpm typing speed - set
 `typing_wpm` to yours).
 
 ## Settings reference (`config.json`)
 
 All settings live in `config.json` next to the scripts, created with these
 defaults on first run. Edit it (menu → Open Settings file), then use
-**Reload settings** — no restart needed.
+**Reload settings**: no restart needed.
 
 | Key | Default | What it does |
 |---|---|---|
@@ -126,8 +126,8 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `double_tap_seconds` | `0.5` | Two taps within this window lock recording on. |
 | `tap_seconds` | `0.3` | A press shorter than this counts as a tap, not a hold. |
 | `typing_wpm` | `40` | Your typing speed, for the "minutes saved" stat. |
-| `fillers` | `["um", "uh", …]` | Words to strip. Each also matches with a stretched last letter ("ummm"). |
-| `spoken_punctuation` | `{"comma": ",", …}` | Say the key, get the value. Add your own (`"smiley": "🙂"`). Values may contain `\n`. |
+| `fillers` | `["um", "uh", ...]` | Words to strip. Each also matches with a stretched last letter ("ummm"). |
+| `spoken_punctuation` | `{"comma": ",", ...}` | Say the key, get the value. Add your own (`"smiley": "🙂"`). Values may contain `\n`. |
 | `spoken_punctuation_mode` | `"smart"` | `smart` converts spoken punctuation but leaves obvious noun uses alone ("the trial period ends", "an Oxford comma"). `always` converts every occurrence; `off` disables conversion. |
 | `vocabulary` | `[]` | Names/jargon hinted to the local speech model so it recognizes them, e.g. `["Benjiman", "kubectl"]`. |
 | `auto_learn_vocabulary` | `true` | Mine each dictation for unusual words (not in the system dictionary) and remember them in `learned_words.json`. Words seen twice get hinted to the local speech model alongside `vocabulary`; "scratch that" un-learns the erased text. Set `false` to only use the manual list. |
@@ -141,46 +141,46 @@ leave your Mac, and can be opened, edited, or deleted anytime.
 
 ## Troubleshooting
 
-- **⚠️ in the menu bar** — click it; the first menu line says what went
+- **⚠️ in the menu bar**: click it; the first menu line says what went
   wrong (mic unavailable, model download failed, paste blocked, broken
   config.json).
-- **Nothing types, but History shows the text** — Accessibility permission
+- **Nothing types, but History shows the text**: Accessibility permission
   is missing, or the app needs one restart after you granted it.
-- **Hotkey does nothing** — Accessibility permission (Input Monitoring for
+- **Hotkey does nothing**: Accessibility permission (Input Monitoring for
   terminal mode). Also check `hotkey` in config.json is a supported name.
-- **"no speech detected"** — Microphone permission, or the wrong input
+- **"no speech detected"**: Microphone permission, or the wrong input
   device in System Settings → Sound → Input.
-- **Slow transcription** — switch to `base.en` or `tiny.en` in the Model
+- **Slow transcription**: switch to `base.en` or `tiny.en` in the Model
   menu.
 - **It typed "period" literally (or turned it into a ".") when you meant
-  the opposite** — the default `smart` mode guesses from context: a
+  the opposite**: the default `smart` mode guesses from context: a
   determiner right before the word ("in **a** period", "**the** trial
   period ends") keeps it literal, everything else converts. It can guess
   wrong on unusual phrasing. Set `spoken_punctuation_mode` to `always` or
   `off` to remove the guessing, or delete individual entries from
   `spoken_punctuation`.
-- **It learned a correction I don't want** — open the settings file and
+- **It learned a correction I don't want**: open the settings file and
   delete that entry from `corrections`, then Reload settings. Set
   `learn_from_edits` to `false` to turn the feature off entirely.
-- **A privacy note on edit-learning** — keystrokes are only examined for a
+- **A privacy note on edit-learning**: keystrokes are only examined for a
   short window right after Flow Local itself pastes text, only to detect a
   backspace-and-retype of that text; they are never logged or stored (the
   only thing kept is the finished correction rule you can see in
   `config.json`). Everything is local, and the code is ~100 readable lines
   (`EditWatcher` in `flow_local.py`) if you want to check.
-- **Clipboard** — text is inserted via the clipboard; your previous
+- **Clipboard**: text is inserted via the clipboard; your previous
   clipboard *text* is restored afterwards (images/files are not).
-- **Two icons / double-typed text** — can't happen anymore: a second launch
+- **Two icons / double-typed text**: can't happen anymore: a second launch
   exits quietly (single-instance lock).
 
 ## How it compares to Wispr Flow
 
 > Flow Local is an independent open-source project, not affiliated with or
 > endorsed by anyone. Two similar names, two unrelated things: **Wispr**
-> (no "h") is the company behind the commercial Wispr Flow app — nothing
+> (no "h") is the company behind the commercial Wispr Flow app - nothing
 > of theirs is used here. **Whisper** (with "h") is OpenAI's open-source
 > speech-recognition *model*, which this app downloads once and runs
-> entirely on your Mac — used the way any open-source library is used,
+> entirely on your Mac - used the way any open-source library is used,
 > with no OpenAI service or account involved.
 
 Honest version: [Wispr Flow](https://wisprflow.ai) is a polished commercial
@@ -222,8 +222,8 @@ and remove "Flow Local" from Login Items if you enabled it.
 `flow_local.py` is the engine (audio, Whisper, text cleanup, hotkey state
 machine); `flow_menubar.py` is the menu bar UI on top of it; `make_app.sh`
 wraps the latter in a minimal .app bundle. Tests cover the text pipeline
-and config handling — everything that doesn't need a microphone.
+and config handling - everything that doesn't need a microphone.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

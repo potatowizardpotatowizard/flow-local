@@ -43,8 +43,8 @@ def test_unusual_name_is_learned():
     assert words == ["Benjiman"]
 
 def test_dictionary_proper_nouns_are_not_learned():
-    # "Monday" is capitalized mid-sentence, but the dictionary knows it —
-    # Whisper spells it fine, no need to spend a hint slot on it
+    # "Monday" is capitalized mid-sentence, but the dictionary knows it,
+    # so the model spells it fine. No need to spend a hint slot on it.
     assert extract_learnable_words("the meeting moved to Monday", DICT) == []
 
 def test_without_system_dict_falls_back_to_proper_nouns():

@@ -3,7 +3,7 @@
 # Run:  bash make_app.sh
 #
 # The .app is a tiny bash launcher that starts flow_menubar.py from this
-# folder's .venv — no py2app, no bundling. Keeping the same app name and
+# folder's .venv - no py2app, no bundling. Keeping the same app name and
 # bundle id (local.flow.dictation) means macOS permissions (Microphone,
 # Input Monitoring, Accessibility) stay granted across rebuilds.
 set -e
@@ -12,7 +12,7 @@ SRC="$(pwd)"
 APP="$HOME/Applications/Flow Local.app"
 
 if [ ! -x "$SRC/.venv/bin/python" ]; then
-    echo "No .venv found — run 'bash setup.sh' first."
+    echo "No .venv found - run 'bash setup.sh' first."
     exit 1
 fi
 
@@ -24,7 +24,7 @@ if [ ! -f "$SRC/icon.icns" ]; then
 fi
 cp "$SRC/icon.icns" "$APP/Contents/Resources/icon.icns"
 
-# Info.plist — the app's identity. LSUIElement hides it from the Dock
+# Info.plist - the app's identity. LSUIElement hides it from the Dock
 # (it lives in the menu bar only).
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -58,12 +58,12 @@ chmod +x "$APP/Contents/MacOS/flow-local"
 # Refresh LaunchServices so Finder/login items see the (re)built app.
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP" 2>/dev/null || true
 
-# Add to Login Items (idempotent — skip if already there). The in-app
+# Add to Login Items (idempotent - skip if already there). The in-app
 # "Launch at Login" menu item can toggle this later.
 if ! osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "Flow Local"; then
     osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$APP\", hidden:false}" >/dev/null 2>&1 \
         && echo "Added to Login Items." \
-        || echo "Couldn't add to Login Items automatically — use the in-app 'Launch at Login' toggle."
+        || echo "Couldn't add to Login Items automatically - use the in-app 'Launch at Login' toggle."
 else
     echo "Already in Login Items."
 fi

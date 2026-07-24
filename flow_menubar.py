@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Flow Local — menu bar app.
+Flow Local - menu bar app.
 
 Wraps the engine in flow_local.py with a macOS menu bar icon:
 
@@ -263,7 +263,7 @@ class FlowMenuBarApp(rumps.App):
         keycode = KEYCODES.get(name)
         if keycode is None:
             self.engine._fail(
-                f"Unknown hotkey '{name}' in config.json — "
+                f"Unknown hotkey '{name}' in config.json - "
                 f"pick one of: {', '.join(KEYCODES)}"
             )
             return
@@ -273,7 +273,7 @@ class FlowMenuBarApp(rumps.App):
             try:
                 etype = event.type()
                 if etype in (NSEventTypeLeftMouseDown, NSEventTypeRightMouseDown):
-                    # A click moves the cursor — any pending edit-learning
+                    # A click moves the cursor - any pending edit-learning
                     # would attribute keystrokes to the wrong place.
                     self.engine.edit_watcher.abort()
                     return
@@ -347,12 +347,12 @@ class FlowMenuBarApp(rumps.App):
         elif e.state == "recording":
             status = "Recording… release to type"
         elif e.state == "locked":
-            status = "Recording locked — tap hotkey to stop"
+            status = "Recording locked - tap hotkey to stop"
         elif e.state == "transcribing":
             status = "Transcribing…"
         else:
             status = (
-                f"Ready — hold {hotkey_label(e.settings.get('hotkey', 'alt_r'))} "
+                f"Ready - hold {hotkey_label(e.settings.get('hotkey', 'alt_r'))} "
                 f"to talk, double-tap to lock"
             )
         if len(status) > 90:
@@ -440,7 +440,7 @@ def main():
         sys.exit(1)
 
     # Single-instance guard: a second launch exits instead of double-typing
-    # every dictation — but says so, since a menu-bar app opening "does
+    # every dictation - but says so, since a menu-bar app opening "does
     # nothing" visible. The handle must outlive the app.
     lock = fl.acquire_single_instance_lock()
     if lock is None:

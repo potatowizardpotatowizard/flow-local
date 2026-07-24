@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Flow Local — offline dictation for macOS.  This file is the engine.
+Flow Local - offline dictation for macOS.  This file is the engine.
 
 Hold the hotkey (Right Option by default), speak, release: your words are
 transcribed locally with Whisper, cleaned up, and typed into whatever app
@@ -13,7 +13,7 @@ You can run this file directly for a terminal-only experience
 (`bash run.sh`), but the nicer way is the menu bar app: `flow_menubar.py`
 (built into "Flow Local.app" by `make_app.sh`).
 
-All user settings live in config.json next to this file — created with
+All user settings live in config.json next to this file - created with
 sensible defaults on first run.
 """
 
@@ -111,7 +111,7 @@ def load_settings():
     """Read config.json, creating it with defaults on first run.
 
     Returns (settings_dict, error_message_or_None). A broken config.json is
-    never overwritten — you get defaults plus an error to surface in the UI.
+    never overwritten - you get defaults plus an error to surface in the UI.
     """
     if not os.path.exists(CONFIG_PATH):
         save_settings(DEFAULT_SETTINGS)
@@ -159,7 +159,7 @@ _DETERMINERS = {
     "each", "every", "per", "one", "no", "any", "some", "another",
 }
 # Two words back, only articles/possessives are trustworthy ("the trial
-# period ends") — "this"/"that" there is usually a pronoun ("that works
+# period ends") - "this"/"that" there is usually a pronoun ("that works
 # period" is a command).
 _ARTICLES = {
     "the", "a", "an",
@@ -194,7 +194,7 @@ def clean_text(text, settings=None):
     # Spoken punctuation: "comma" -> "," etc. Longest phrases first so
     # "question mark" wins before any shorter overlap. Newline values
     # become placeholders until the very end. In "smart" mode (default),
-    # words that look like real nouns are left alone — see _meant_literally.
+    # words that look like real nouns are left alone - see _meant_literally.
     mode = s.get("spoken_punctuation_mode", "smart")
     punct = s.get("spoken_punctuation", {}) if mode != "off" else {}
     for phrase in sorted(punct, key=len, reverse=True):
@@ -278,8 +278,8 @@ def is_scratch_command(text):
 #
 # Whisper accepts a text hint (initial_prompt) that biases it toward
 # words it should expect. Besides the manual `vocabulary` list, Flow
-# Local mines every dictation for unusual words — names, jargon, anything
-# not in the system dictionary — and keeps score in learned_words.json.
+# Local mines every dictation for unusual words - names, jargon, anything
+# not in the system dictionary - and keeps score in learned_words.json.
 # Words seen at least twice get fed back to Whisper, so recognition of
 # *your* words improves the more you dictate. Everything stays on disk,
 # locally. "Scratch that" un-learns the words of the erased dictation.
@@ -333,7 +333,7 @@ def extract_learnable_words(text, system_dict, already_known=()):
     """Words in a dictation worth remembering.
 
     Anything not in the system dictionary (jargon, unusual names) is
-    learnable — words the dictionary knows, Whisper already spells fine.
+    learnable - words the dictionary knows, Whisper already spells fine.
     Without a system dictionary, fall back to mid-sentence capitalized
     words (proper nouns). Contractions are skipped.
     """
@@ -410,7 +410,7 @@ def tidy_spacing(text):
 # ──────────────── Learning corrections from your edits ─────────────────
 #
 # Wispr-style: say "dot dot dot", watch it come out literally, backspace
-# it and type "..." — Flow Local notices the fix and adds a rule to the
+# it and type "..." - Flow Local notices the fix and adds a rule to the
 # `corrections` map in config.json, so it converts automatically from
 # then on. Keystrokes are only watched for a short window right after a
 # dictation, only the fixed phrase is kept, and every learned rule is
@@ -431,8 +431,8 @@ class EditWatcher:
 
     The frontend feeds it key events; when a fix is detected it calls
     on_learn(wrong_text, corrected_text). Anything that suggests the user
-    moved on — clicking, arrow keys, app switching (command keys), typing
-    without deleting first — cancels the watch.
+    moved on - clicking, arrow keys, app switching (command keys), typing
+    without deleting first - cancels the watch.
     """
 
     def __init__(self, system_dict, on_learn):
@@ -504,7 +504,7 @@ class EditWatcher:
             self.on_learn(*learned)
 
     def flush(self, now):
-        """A new dictation is starting — settle any pending fix now."""
+        """A new dictation is starting - settle any pending fix now."""
         learned = None
         with self._lock:
             if self._watch is not None:
@@ -513,7 +513,7 @@ class EditWatcher:
             self.on_learn(*learned)
 
     def _take_correction(self):
-        """Turn the watched edit into a (wrong, fixed) pair — or None if it
+        """Turn the watched edit into a (wrong, fixed) pair - or None if it
         doesn't look like a safe, reusable correction. Clears the watch."""
         w, self._watch = self._watch, None
         if not w["backspaces"] or not w["typed"].strip():
@@ -534,7 +534,7 @@ class EditWatcher:
         if len(fixed) > MAX_REPLACEMENT_CHARS:
             return None
         # Homophone guard: rewriting a single everyday word ("there" ->
-        # "their") would misfire constantly — that fix is context-specific.
+        # "their") would misfire constantly - that fix is context-specific.
         if len(words) == 1 and _in_dictionary(words[0], self.system_dict):
             return None
         return (wrong, fixed)
@@ -588,7 +588,7 @@ def focused_element_is_editable():
         app = AXUIElementCreateApplication(front.processIdentifier())
         err, focused = AXUIElementCopyAttributeValue(app, "AXFocusedUIElement", None)
         if err != 0 or focused is None:
-            return False  # nothing focused at all — desktop, empty space
+            return False  # nothing focused at all - desktop, empty space
         err, role = AXUIElementCopyAttributeValue(focused, "AXRole", None)
         if err == 0 and role in (
             "AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"
@@ -606,14 +606,14 @@ def _accessibility_granted():
         from ApplicationServices import AXIsProcessTrusted
         return bool(AXIsProcessTrusted())
     except Exception:
-        return True  # can't check — try anyway
+        return True  # can't check - try anyway
 
 
 def _press_key(keycode, command=False):
     """Synthesize one keystroke via CoreGraphics.
 
     This posts the event from Flow Local itself, so it needs only the
-    Accessibility permission — unlike osascript/System Events, which
+    Accessibility permission - unlike osascript/System Events, which
     additionally needs the separate Automation permission.
     """
     from Quartz import (
@@ -693,7 +693,7 @@ class FlowEngine:
       total_words, total_audio_seconds   session stats
 
     and may pass on_event(kind, message) to get notified of changes
-    (called from background threads — don't touch UI directly in it).
+    (called from background threads - don't touch UI directly in it).
     """
 
     HISTORY_LIMIT = 10
@@ -736,7 +736,7 @@ class FlowEngine:
         self.correction_version = 0
 
         # (title, message) pairs for the frontend to display as
-        # notifications — the menu bar app drains this on its UI timer so
+        # notifications - the menu bar app drains this on its UI timer so
         # notifications come from Flow Local's own identity.
         self.pending_notifications = []
 
@@ -883,7 +883,7 @@ class FlowEngine:
     # ── transcription ──
     def _transcribe(self, audio, duration):
         if self.model is None:
-            self._fail("Model not loaded yet — try again in a moment.")
+            self._fail("Model not loaded yet - try again in a moment.")
             return
         t0 = time.time()
         language = "en" if self.model_size.endswith(".en") else None
@@ -922,7 +922,7 @@ class FlowEngine:
             preview = text if len(text) <= 60 else text[:60] + "…"
             play_sound("Purr", self.settings)  # audible cue: it went to the clipboard
             self.pending_notifications.append(
-                ("Copied to clipboard", f"“{preview}” — paste it anywhere with ⌘V")
+                ("Copied to clipboard", f"“{preview}” - paste it anywhere with ⌘V")
             )
             self._last_pasted = ""  # nothing on screen for "scratch that"
             self._clear_error()
@@ -937,7 +937,7 @@ class FlowEngine:
         inserted = paste_text(text, self.settings)
         if inserted is None:
             self._fail(
-                "macOS blocked the paste — enable Accessibility permission "
+                "macOS blocked the paste - enable Accessibility permission "
                 "for Flow Local (or Terminal), then try again."
             )
             return
@@ -979,14 +979,14 @@ class FlowEngine:
                 self.total_words -= entry["words"]
                 self.total_audio_seconds -= entry["seconds"]
                 self.history_version += 1
-                # A scratched dictation was probably misheard — un-learn it.
+                # A scratched dictation was probably misheard - un-learn it.
                 if self.settings.get("auto_learn_vocabulary", True):
                     unlearn_words(self.learned, entry["text"])
                     save_learned_words(self.learned)
             self._last_pasted = ""
             self._set_state("ready")
         else:
-            self._fail("Could not send backspaces — check Accessibility permission.")
+            self._fail("Could not send backspaces - check Accessibility permission.")
 
     def minutes_saved(self):
         """Typing time avoided (at typing_wpm) minus time spent speaking."""
@@ -1001,7 +1001,7 @@ class FlowEngine:
         name = self.settings.get("hotkey", "alt_r")
         hotkey = getattr(keyboard.Key, name, None)
         if hotkey is None:
-            self._fail(f"Unknown hotkey '{name}' in config.json — see README.")
+            self._fail(f"Unknown hotkey '{name}' in config.json - see README.")
             return False
 
         def on_press(key):
@@ -1046,7 +1046,7 @@ class FlowEngine:
         if self._mode == "hold":
             self._mode = "idle"
             if now - self._press_time <= self.settings.get("tap_seconds", 0.3):
-                # Just a tap — maybe the first half of a double-tap.
+                # Just a tap - maybe the first half of a double-tap.
                 self._last_tap_time = now
                 self._discard_recording()
             else:
@@ -1097,7 +1097,7 @@ def main():
 
     lock = acquire_single_instance_lock()
     if lock is None:
-        print("Flow Local is already running — exiting.")
+        print("Flow Local is already running - exiting.")
         sys.exit(0)
 
     settings, config_error = load_settings()

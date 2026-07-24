@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Generate icon.icns for Flow Local — a 🎙 on a dark rounded square.
+Generate icon.icns for Flow Local - a 🎙 on a dark rounded square.
 
 Run by make_app.sh (needs no arguments):  .venv/bin/python make_icon.py
 Writes icon.icns next to this script. Delete icon.icns and re-run to
-regenerate. Pure macOS APIs — no image libraries needed.
+regenerate. Pure macOS APIs - no image libraries needed.
 """
 
 import os
