@@ -25,7 +25,11 @@ is in front. Email, Slack, docs, code review comments, anywhere.
   that fix becomes an automatic rule from then on. You get a notification,
   and the rule is visible in `config.json` under `corrections`.
 
-Total footprint is about 1 GB, mostly the Whisper model.
+Total footprint is about 1 GB — mostly the Whisper speech model, which is
+downloaded **once** and then runs entirely on your Mac. (Whisper is
+OpenAI's open-source speech-recognition model: this app uses a local copy
+of the model file, not any OpenAI service. The repo itself is just a few
+hundred KB of Python.)
 
 ## Install (from a fresh clone, ~5 minutes)
 
