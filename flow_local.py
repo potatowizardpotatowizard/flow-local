@@ -723,6 +723,11 @@ class FlowEngine:
         self.recording = False
         self._frames_lock = threading.Lock()
         self.stream = None
+        # Bumped on every press/release so a slow mic-open can tell the
+        # user already let go and it shouldn't arm recording anymore.
+        self._record_gen = 0
+        # Serializes mic opens so rapid press/release can't overlap them.
+        self._audio_open_lock = threading.Lock()
 
         self._last_pasted = ""  # exact last insertion, for "scratch that"
 
@@ -819,14 +824,26 @@ class FlowEngine:
             return False
 
     def close_microphone(self):
-        """Release the mic entirely (orange indicator turns off)."""
-        if self.stream is not None:
+        """Release the mic (orange indicator turns off) - asynchronously.
+
+        Stopping a CoreAudio stream can, rarely, deadlock inside macOS
+        (seen in the wild: main thread wedged in AudioDeviceStop waiting
+        on a HAL mutex, freezing the whole menu bar). So the stream is
+        detached immediately and stopped on a throwaway thread; if that
+        thread wedges, it is abandoned and the app stays responsive.
+        """
+        stream, self.stream = self.stream, None
+        if stream is None:
+            return
+
+        def closer():
             try:
-                self.stream.stop()
-                self.stream.close()
+                stream.stop()
+                stream.close()
             except Exception:
                 pass
-            self.stream = None
+
+        threading.Thread(target=closer, daemon=True).start()
 
     def _audio_callback(self, indata, frames, time_info, status):
         if self.recording:
@@ -842,16 +859,35 @@ class FlowEngine:
         self.on_event("log", f'Learned correction: "{wrong}" → "{fixed}"')
 
     def _start_recording(self, locked=False):
+        """Instant feedback on the calling (UI) thread; the actual mic
+        open happens on a worker so a slow/wedged CoreAudio call can
+        never freeze the menu bar."""
         self.edit_watcher.flush(time.monotonic())
-        if self.stream is None and not self.open_microphone():
-            return
-        with self._frames_lock:
-            self.frames = []
-        self.recording = True
+        self._record_gen += 1
+        generation = self._record_gen
         play_sound("Glass" if locked else "Pop", self.settings)
         self._set_state("locked" if locked else "recording")
 
+        def arm():
+            with self._audio_open_lock:
+                if self._record_gen != generation:
+                    return  # released before we even started opening
+                if self.stream is None and not self.open_microphone():
+                    return
+                if self._record_gen != generation:
+                    # Released while the mic was opening: never arm, and
+                    # don't leave an orphaned stream holding the mic.
+                    if not self.settings.get("keep_mic_open", False):
+                        self.close_microphone()
+                    return
+                with self._frames_lock:
+                    self.frames = []
+                self.recording = True
+
+        threading.Thread(target=arm, daemon=True).start()
+
     def _discard_recording(self):
+        self._record_gen += 1
         self.recording = False
         with self._frames_lock:
             self.frames = []
@@ -861,6 +897,7 @@ class FlowEngine:
             self._set_state("ready")
 
     def _stop_recording(self):
+        self._record_gen += 1
         self.recording = False
         with self._frames_lock:
             frames = self.frames
@@ -1082,9 +1119,7 @@ class FlowEngine:
     def shutdown(self):
         if self._listener is not None:
             self._listener.stop()
-        if self.stream is not None:
-            self.stream.stop()
-            self.stream.close()
+        self.close_microphone()
 
 
 # ──────────────────────────── Terminal mode ────────────────────────────
