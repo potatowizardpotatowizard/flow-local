@@ -16,7 +16,13 @@ if [ ! -x "$SRC/.venv/bin/python" ]; then
     exit 1
 fi
 
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+
+# App icon (generated once; delete icon.icns to regenerate)
+if [ ! -f "$SRC/icon.icns" ]; then
+    "$SRC/.venv/bin/python" "$SRC/make_icon.py"
+fi
+cp "$SRC/icon.icns" "$APP/Contents/Resources/icon.icns"
 
 # Info.plist — the app's identity. LSUIElement hides it from the Dock
 # (it lives in the menu bar only).
@@ -32,6 +38,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key>         <string>3.0</string>
     <key>CFBundleShortVersionString</key> <string>3.0</string>
     <key>CFBundleExecutable</key>      <string>flow-local</string>
+    <key>CFBundleIconFile</key>        <string>icon</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>LSUIElement</key>             <true/>
     <key>NSMicrophoneUsageDescription</key>
