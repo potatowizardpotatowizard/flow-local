@@ -18,10 +18,41 @@ import sys
 import threading
 
 import rumps
+from AppKit import (
+    NSEvent,
+    NSEventMaskFlagsChanged,
+    NSEventMaskKeyDown,
+    NSEventMaskKeyUp,
+    NSEventModifierFlagCommand,
+    NSEventModifierFlagControl,
+    NSEventModifierFlagOption,
+    NSEventTypeFlagsChanged,
+    NSEventTypeKeyDown,
+    NSEventTypeKeyUp,
+)
 
 import flow_local as fl
 
 APP_BUNDLE_PATH = os.path.expanduser("~/Applications/Flow Local.app")
+
+# The hotkey is watched with a native NSEvent global monitor rather than
+# pynput: pynput's listener thread calls Text Services APIs that crash
+# (dispatch_assert_queue) inside an AppKit app on modern macOS. The
+# monitor is installed on the main thread and only needs the
+# Accessibility permission the app already has for pasting.
+KEYCODES = {
+    "alt_r": 61, "alt_l": 58, "cmd_r": 54, "ctrl_r": 62,
+    "f13": 105, "f14": 107, "f15": 113, "f16": 106,
+    "f17": 64, "f18": 79, "f19": 80, "f20": 90,
+}
+# Modifier keys arrive as flags-changed events; this maps their keycode to
+# the flag that tells press apart from release.
+MODIFIER_FLAGS = {
+    61: NSEventModifierFlagOption,
+    58: NSEventModifierFlagOption,
+    54: NSEventModifierFlagCommand,
+    62: NSEventModifierFlagControl,
+}
 
 ICONS = {
     "loading": "⏳",
@@ -122,6 +153,10 @@ class FlowMenuBarApp(rumps.App):
         self.login_item.state = 1 if login_item_exists() else 0
         self._sync_model_checkmarks()
 
+        self._monitor = None
+        self._hotkey_keycode = None
+        self.install_hotkey_monitor()
+
         # The engine runs in background threads; this timer is the only
         # thing that touches the UI, always from the main thread.
         self.timer = rumps.Timer(self.sync_ui, 0.3)
@@ -133,10 +168,47 @@ class FlowMenuBarApp(rumps.App):
     def _start_engine(self):
         if self.engine.load_model():
             self.engine.open_microphone()
-        self.engine.start_hotkey_listener()
         # Surface a broken config.json even though the model loaded fine.
         if self.config_error:
             self.engine._fail(self.config_error)
+
+    # ── hotkey (NSEvent global monitor) ──
+    def install_hotkey_monitor(self):
+        if self._monitor is not None:
+            NSEvent.removeMonitor_(self._monitor)
+            self._monitor = None
+        name = self.engine.settings.get("hotkey", "alt_r")
+        keycode = KEYCODES.get(name)
+        if keycode is None:
+            self.engine._fail(
+                f"Unknown hotkey '{name}' in config.json — "
+                f"pick one of: {', '.join(KEYCODES)}"
+            )
+            return
+        self._hotkey_keycode = keycode
+
+        def handler(event):
+            try:
+                if event.keyCode() != self._hotkey_keycode:
+                    return
+                etype = event.type()
+                if etype == NSEventTypeFlagsChanged:
+                    # Modifier key: the flag tells press apart from release.
+                    if event.modifierFlags() & MODIFIER_FLAGS[self._hotkey_keycode]:
+                        self.engine._hotkey_pressed()
+                    else:
+                        self.engine._hotkey_released()
+                elif etype == NSEventTypeKeyDown and not event.isARepeat():
+                    self.engine._hotkey_pressed()
+                elif etype == NSEventTypeKeyUp:
+                    self.engine._hotkey_released()
+            except Exception as e:
+                self.engine._fail(f"Hotkey handler error: {e}")
+
+        mask = NSEventMaskFlagsChanged | NSEventMaskKeyDown | NSEventMaskKeyUp
+        self._monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            mask, handler
+        )
 
     # ── periodic UI refresh ──
     def sync_ui(self, _timer):
@@ -214,7 +286,8 @@ class FlowMenuBarApp(rumps.App):
         subprocess.run(["open", "-e", fl.CONFIG_PATH])
 
     def on_reload_settings(self, _item):
-        self.engine.reload_settings()
+        if self.engine.reload_settings():
+            self.install_hotkey_monitor()  # in case the hotkey changed
 
     def on_toggle_login(self, item):
         if item.state:
