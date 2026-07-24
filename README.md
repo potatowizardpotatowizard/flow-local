@@ -15,7 +15,8 @@ is in front. Email, Slack, docs, code review comments, anywhere.
 - 🗣 **Knows your words** — teach it names and jargon in a personal
   dictionary, and it also **learns automatically**: unusual words you
   dictate are remembered (locally, in `learned_words.json`) and hinted
-  back to Whisper, so recognition of *your* vocabulary improves with use.
+  back to the local speech model, so recognition of *your* vocabulary
+  improves with use.
 - ↩️ **"Scratch that"** — say it to erase the last dictation.
 - 📋 **Nowhere to type? Clipboard.** — dictate with no text field focused
   (say, from the desktop) and the text lands on your clipboard with a
@@ -128,8 +129,8 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `fillers` | `["um", "uh", …]` | Words to strip. Each also matches with a stretched last letter ("ummm"). |
 | `spoken_punctuation` | `{"comma": ",", …}` | Say the key, get the value. Add your own (`"smiley": "🙂"`). Values may contain `\n`. |
 | `spoken_punctuation_mode` | `"smart"` | `smart` converts spoken punctuation but leaves obvious noun uses alone ("the trial period ends", "an Oxford comma"). `always` converts every occurrence; `off` disables conversion. |
-| `vocabulary` | `[]` | Names/jargon hinted to Whisper so it recognizes them, e.g. `["Benjiman", "kubectl"]`. |
-| `auto_learn_vocabulary` | `true` | Mine each dictation for unusual words (not in the system dictionary) and remember them in `learned_words.json`. Words seen twice get hinted to Whisper alongside `vocabulary`; "scratch that" un-learns the erased text. Set `false` to only use the manual list. |
+| `vocabulary` | `[]` | Names/jargon hinted to the local speech model so it recognizes them, e.g. `["Benjiman", "kubectl"]`. |
+| `auto_learn_vocabulary` | `true` | Mine each dictation for unusual words (not in the system dictionary) and remember them in `learned_words.json`. Words seen twice get hinted to the local speech model alongside `vocabulary`; "scratch that" un-learns the erased text. Set `false` to only use the manual list. |
 | `learn_from_edits` | `true` | Watch the ~30s after each dictation for backspace-and-retype fixes and turn them into `corrections` rules (with a notification). Guarded: clicks, arrow keys, and app switches cancel it; long rephrasings and single common-word swaps ("there" → "their") are never learned. Menu bar app only. |
 | `corrections` | `{}` | Forced post-fixes, e.g. `{"cloud code": "Claude Code"}`. Case-insensitive, whole words. |
 
@@ -174,9 +175,13 @@ leave your Mac, and can be opened, edited, or deleted anytime.
 
 ## How it compares to Wispr Flow
 
-> Flow Local is an independent open-source project. It is not affiliated
-> with, endorsed by, or connected to Wispr Inc. (makers of Wispr Flow) or
-> OpenAI (creators of the Whisper speech model it runs locally).
+> Flow Local is an independent open-source project, not affiliated with or
+> endorsed by anyone. Two similar names, two unrelated things: **Wispr**
+> (no "h") is the company behind the commercial Wispr Flow app — nothing
+> of theirs is used here. **Whisper** (with "h") is OpenAI's open-source
+> speech-recognition *model*, which this app downloads once and runs
+> entirely on your Mac — used the way any open-source library is used,
+> with no OpenAI service or account involved.
 
 Honest version: [Wispr Flow](https://wisprflow.ai) is a polished commercial
 product with cloud-scale accuracy, AI rewriting/tone matching, context
