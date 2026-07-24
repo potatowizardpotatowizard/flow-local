@@ -360,10 +360,18 @@ def main():
         print("Flow Local is macOS-only.")
         sys.exit(1)
 
-    # Single-instance guard: a second launch exits quietly instead of
-    # double-typing every dictation. The handle must outlive the app.
+    # Single-instance guard: a second launch exits instead of double-typing
+    # every dictation — but says so, since a menu-bar app opening "does
+    # nothing" visible. The handle must outlive the app.
     lock = fl.acquire_single_instance_lock()
     if lock is None:
+        subprocess.run(
+            ["osascript", "-e",
+             'display notification '
+             '"Look for the 🎙 icon at the top-right of your screen." '
+             'with title "Flow Local is already running"'],
+            capture_output=True,
+        )
         sys.exit(0)
 
     settings, config_error = fl.load_settings()
