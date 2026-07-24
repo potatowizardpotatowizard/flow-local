@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 
 import rumps
 from AppKit import (
@@ -23,12 +24,16 @@ from AppKit import (
     NSEventMaskFlagsChanged,
     NSEventMaskKeyDown,
     NSEventMaskKeyUp,
+    NSEventMaskLeftMouseDown,
+    NSEventMaskRightMouseDown,
     NSEventModifierFlagCommand,
     NSEventModifierFlagControl,
     NSEventModifierFlagOption,
     NSEventTypeFlagsChanged,
     NSEventTypeKeyDown,
     NSEventTypeKeyUp,
+    NSEventTypeLeftMouseDown,
+    NSEventTypeRightMouseDown,
 )
 
 import flow_local as fl
@@ -119,6 +124,7 @@ class FlowMenuBarApp(rumps.App):
         self.engine = engine
         self.config_error = config_error
         self._shown_history_version = -1
+        self._shown_correction_version = 0
         self._last_status = None
 
         # Menu skeleton. Items without a callback render greyed out,
@@ -189,23 +195,47 @@ class FlowMenuBarApp(rumps.App):
 
         def handler(event):
             try:
-                if event.keyCode() != self._hotkey_keycode:
-                    return
                 etype = event.type()
-                if etype == NSEventTypeFlagsChanged:
-                    # Modifier key: the flag tells press apart from release.
-                    if event.modifierFlags() & MODIFIER_FLAGS[self._hotkey_keycode]:
+                if etype in (NSEventTypeLeftMouseDown, NSEventTypeRightMouseDown):
+                    # A click moves the cursor — any pending edit-learning
+                    # would attribute keystrokes to the wrong place.
+                    self.engine.edit_watcher.abort()
+                    return
+                if event.keyCode() == self._hotkey_keycode:
+                    if etype == NSEventTypeFlagsChanged:
+                        # Modifier key: the flag tells press from release.
+                        if event.modifierFlags() & MODIFIER_FLAGS[self._hotkey_keycode]:
+                            self.engine._hotkey_pressed()
+                        else:
+                            self.engine._hotkey_released()
+                    elif etype == NSEventTypeKeyDown and not event.isARepeat():
                         self.engine._hotkey_pressed()
-                    else:
+                    elif etype == NSEventTypeKeyUp:
                         self.engine._hotkey_released()
-                elif etype == NSEventTypeKeyDown and not event.isARepeat():
-                    self.engine._hotkey_pressed()
-                elif etype == NSEventTypeKeyUp:
-                    self.engine._hotkey_released()
+                elif etype == NSEventTypeKeyDown and self.engine.settings.get(
+                    "learn_from_edits", True
+                ):
+                    try:
+                        chars = event.characters() or ""
+                    except Exception:
+                        chars = ""
+                    has_command = bool(
+                        event.modifierFlags()
+                        & (NSEventModifierFlagCommand | NSEventModifierFlagControl)
+                    )
+                    self.engine.edit_watcher.observe_key(
+                        event.keyCode(), chars, has_command, time.monotonic()
+                    )
             except Exception as e:
                 self.engine._fail(f"Hotkey handler error: {e}")
 
-        mask = NSEventMaskFlagsChanged | NSEventMaskKeyDown | NSEventMaskKeyUp
+        mask = (
+            NSEventMaskFlagsChanged
+            | NSEventMaskKeyDown
+            | NSEventMaskKeyUp
+            | NSEventMaskLeftMouseDown
+            | NSEventMaskRightMouseDown
+        )
         self._monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             mask, handler
         )
@@ -214,6 +244,22 @@ class FlowMenuBarApp(rumps.App):
     def sync_ui(self, _timer):
         e = self.engine
         self.title = ICONS.get(e.state, "🎙")
+
+        # A typing pause completes any pending edit-learning; announce
+        # newly learned corrections so nothing happens silently.
+        e.edit_watcher.tick(time.monotonic())
+        if e.correction_version != self._shown_correction_version:
+            self._shown_correction_version = e.correction_version
+            if e.last_learned_correction:
+                wrong, fixed = e.last_learned_correction
+                try:
+                    rumps.notification(
+                        "Flow Local learned a correction",
+                        "",
+                        f'"{wrong}" will now become "{fixed}"',
+                    )
+                except Exception:
+                    pass  # notifications need the .app bundle; fine without
 
         if e.state == "error":
             status = "⚠️ " + (e.error_message or "Unknown error")

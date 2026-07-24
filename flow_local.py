@@ -90,6 +90,11 @@ DEFAULT_SETTINGS = {
     # Forced fixes applied after transcription (case-insensitive match).
     # Example: {"cloud code": "Claude Code"}
     "corrections": {},
+    # Learn corrections from your edits: if you backspace part of a fresh
+    # dictation and retype it, the fix becomes a `corrections` rule
+    # (e.g. say "dot dot dot", replace the literal words with "...", and
+    # it converts automatically from then on). Menu bar app only.
+    "learn_from_edits": True,
 }
 
 
@@ -388,6 +393,144 @@ def build_initial_prompt(settings, store):
     return ("Vocabulary: " + ", ".join(words)) if words else None
 
 
+def tidy_spacing(text):
+    """Re-fix "word ..." -> "word..." after corrections insert punctuation."""
+    return re.sub(r"\s+([,.!?;:%)])", r"\1", text)
+
+
+# ──────────────── Learning corrections from your edits ─────────────────
+#
+# Wispr-style: say "dot dot dot", watch it come out literally, backspace
+# it and type "..." — Flow Local notices the fix and adds a rule to the
+# `corrections` map in config.json, so it converts automatically from
+# then on. Keystrokes are only watched for a short window right after a
+# dictation, only the fixed phrase is kept, and every learned rule is
+# visible (and deletable) in config.json.
+
+EDIT_WATCH_SECONDS = 30.0    # stop watching this long after a paste
+EDIT_PAUSE_SECONDS = 2.5     # a typing pause this long ends the fix
+MAX_CORRECTION_WORDS = 4     # longer replacements are rephrasing, not fixes
+MAX_REPLACEMENT_CHARS = 40
+
+_KEY_BACKSPACE = 51
+_KEYS_FINALIZE = {36, 76, 48}          # return, keypad enter, tab
+_KEYS_ABORT = {53, 123, 124, 125, 126}  # escape, arrow keys
+
+
+class EditWatcher:
+    """Watches the brief window after a paste for backspace-and-retype.
+
+    The frontend feeds it key events; when a fix is detected it calls
+    on_learn(wrong_text, corrected_text). Anything that suggests the user
+    moved on — clicking, arrow keys, app switching (command keys), typing
+    without deleting first — cancels the watch.
+    """
+
+    def __init__(self, system_dict, on_learn):
+        self.system_dict = system_dict
+        self.on_learn = on_learn
+        self._lock = threading.Lock()
+        self._watch = None
+
+    def start(self, pasted_text, now):
+        with self._lock:
+            self._watch = {
+                "text": pasted_text,
+                "backspaces": 0,
+                "typed": "",
+                "start": now,
+                "last_key": now,
+            }
+
+    def abort(self):
+        with self._lock:
+            self._watch = None
+
+    def observe_key(self, keycode, chars, has_command_modifier, now):
+        learned = None
+        with self._lock:
+            w = self._watch
+            if w is None:
+                return
+            if now - w["start"] > EDIT_WATCH_SECONDS or has_command_modifier:
+                self._watch = None
+                return
+            if keycode == _KEY_BACKSPACE:
+                if w["typed"]:
+                    w["typed"] = w["typed"][:-1]  # typo in the replacement
+                else:
+                    w["backspaces"] += 1
+                    if w["backspaces"] > len(w["text"]):
+                        self._watch = None
+                        return
+                w["last_key"] = now
+            elif keycode in _KEYS_FINALIZE:
+                learned = self._take_correction()
+            elif keycode in _KEYS_ABORT:
+                self._watch = None
+            else:
+                printable = "".join(c for c in chars if c.isprintable())
+                if not printable:
+                    return
+                if w["backspaces"] == 0:
+                    self._watch = None  # typing onward, not fixing
+                else:
+                    w["typed"] += printable
+                    w["last_key"] = now
+        if learned:
+            self.on_learn(*learned)
+
+    def tick(self, now):
+        """Call periodically: a pause after retyping completes the fix."""
+        learned = None
+        with self._lock:
+            w = self._watch
+            if w is None:
+                return
+            if now - w["start"] > EDIT_WATCH_SECONDS:
+                self._watch = None
+            elif w["typed"] and now - w["last_key"] > EDIT_PAUSE_SECONDS:
+                learned = self._take_correction()
+        if learned:
+            self.on_learn(*learned)
+
+    def flush(self, now):
+        """A new dictation is starting — settle any pending fix now."""
+        learned = None
+        with self._lock:
+            if self._watch is not None:
+                learned = self._take_correction()
+        if learned:
+            self.on_learn(*learned)
+
+    def _take_correction(self):
+        """Turn the watched edit into a (wrong, fixed) pair — or None if it
+        doesn't look like a safe, reusable correction. Clears the watch."""
+        w, self._watch = self._watch, None
+        if not w["backspaces"] or not w["typed"].strip():
+            return None
+        text = w["text"]
+        removed = text[-w["backspaces"]:]
+        # The deletion must start at a word boundary, or the "wrong" side
+        # would be a fragment that never matches future dictations.
+        if w["backspaces"] < len(text) and text[-w["backspaces"] - 1] not in " \n\t":
+            return None
+        wrong = removed.strip()
+        fixed = w["typed"].strip()
+        if not wrong or wrong == fixed or "\n" in wrong:
+            return None
+        words = wrong.split()
+        if not 1 <= len(words) <= MAX_CORRECTION_WORDS:
+            return None
+        if len(fixed) > MAX_REPLACEMENT_CHARS:
+            return None
+        # Homophone guard: rewriting a single everyday word ("there" ->
+        # "their") would misfire constantly — that fix is context-specific.
+        if len(words) == 1 and _in_dictionary(words[0], self.system_dict):
+            return None
+        return (wrong, fixed)
+
+
 # ──────────────────────────── macOS helpers ────────────────────────────
 
 
@@ -514,6 +657,11 @@ class FlowEngine:
         self.learned = load_learned_words()
         self._system_dict = load_system_dictionary()
 
+        # Corrections learned from backspace-and-retype edits
+        self.edit_watcher = EditWatcher(self._system_dict, self._learn_correction)
+        self.last_learned_correction = None
+        self.correction_version = 0
+
         # Hotkey state machine
         self._mode = "idle"  # idle | hold | locked
         self._press_time = 0.0
@@ -595,7 +743,16 @@ class FlowEngine:
             with self._frames_lock:
                 self.frames.append(indata.copy())
 
+    def _learn_correction(self, wrong, fixed):
+        """An edit-derived fix becomes a visible rule in config.json."""
+        self.settings.setdefault("corrections", {})[wrong] = fixed
+        save_settings(self.settings)
+        self.last_learned_correction = (wrong, fixed)
+        self.correction_version += 1
+        self.on_event("log", f'Learned correction: "{wrong}" → "{fixed}"')
+
     def _start_recording(self, locked=False):
+        self.edit_watcher.flush(time.monotonic())
         if self.stream is None and not self.open_microphone():
             return
         with self._frames_lock:
@@ -663,7 +820,7 @@ class FlowEngine:
             self._scratch_last()
             return
 
-        text = apply_corrections(text, self.settings.get("corrections", {}))
+        text = tidy_spacing(apply_corrections(text, self.settings.get("corrections", {})))
 
         inserted = paste_text(text, self.settings)
         if inserted is None:
@@ -679,6 +836,8 @@ class FlowEngine:
         if self.settings.get("auto_learn_vocabulary", True):
             learn_words(self.learned, text, self._system_dict, self.settings)
             save_learned_words(self.learned)
+        if self.settings.get("learn_from_edits", True):
+            self.edit_watcher.start(inserted, time.monotonic())
         self._set_state("ready")
         self.on_event(
             "result",

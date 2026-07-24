@@ -17,6 +17,10 @@ is in front. Email, Slack, docs, code review comments, anywhere.
   dictate are remembered (locally, in `learned_words.json`) and hinted
   back to Whisper, so recognition of *your* vocabulary improves with use.
 - ↩️ **"Scratch that"** — say it to erase the last dictation.
+- ✏️ **Learns from your edits** — backspace part of a fresh dictation and
+  retype it (say "dot dot dot", replace the literal words with `...`) and
+  that fix becomes an automatic rule from then on. You get a notification,
+  and the rule is visible in `config.json` under `corrections`.
 
 Total footprint is about 1 GB, mostly the Whisper model.
 
@@ -97,6 +101,7 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `spoken_punctuation_mode` | `"smart"` | `smart` converts spoken punctuation but leaves obvious noun uses alone ("the trial period ends", "an Oxford comma"). `always` converts every occurrence; `off` disables conversion. |
 | `vocabulary` | `[]` | Names/jargon hinted to Whisper so it recognizes them, e.g. `["Benjiman", "kubectl"]`. |
 | `auto_learn_vocabulary` | `true` | Mine each dictation for unusual words (not in the system dictionary) and remember them in `learned_words.json`. Words seen twice get hinted to Whisper alongside `vocabulary`; "scratch that" un-learns the erased text. Set `false` to only use the manual list. |
+| `learn_from_edits` | `true` | Watch the ~30s after each dictation for backspace-and-retype fixes and turn them into `corrections` rules (with a notification). Guarded: clicks, arrow keys, and app switches cancel it; long rephrasings and single common-word swaps ("there" → "their") are never learned. Menu bar app only. |
 | `corrections` | `{}` | Forced post-fixes, e.g. `{"cloud code": "Claude Code"}`. Case-insensitive, whole words. |
 
 `config.json` and `learned_words.json` are `.gitignore`d because they
@@ -124,6 +129,15 @@ leave your Mac, and can be opened, edited, or deleted anytime.
   wrong on unusual phrasing. Set `spoken_punctuation_mode` to `always` or
   `off` to remove the guessing, or delete individual entries from
   `spoken_punctuation`.
+- **It learned a correction I don't want** — open the settings file and
+  delete that entry from `corrections`, then Reload settings. Set
+  `learn_from_edits` to `false` to turn the feature off entirely.
+- **A privacy note on edit-learning** — keystrokes are only examined for a
+  short window right after Flow Local itself pastes text, only to detect a
+  backspace-and-retype of that text; they are never logged or stored (the
+  only thing kept is the finished correction rule you can see in
+  `config.json`). Everything is local, and the code is ~100 readable lines
+  (`EditWatcher` in `flow_local.py`) if you want to check.
 - **Clipboard** — text is inserted via the clipboard; your previous
   clipboard *text* is restored afterwards (images/files are not).
 - **Two icons / double-typed text** — can't happen anymore: a second launch
