@@ -64,11 +64,11 @@ Good to know, so nothing surprises you:
 - Opening the app shows **no window and no Dock icon** — it lives
   entirely in the menu bar (the 🎙 at the top-right of your screen).
   Opening it a second time just shows an "already running" notification.
-- The **orange microphone indicator** stays on the whole time Flow Local
-  runs. That's because the mic stream is kept open so recording starts
-  the instant you press the hotkey — but audio is only *kept* while
-  you're actually recording; everything else is discarded as it arrives,
-  and nothing ever leaves your Mac.
+- The **orange microphone indicator** appears only while you're actually
+  dictating — the mic is opened when you press the hotkey and fully
+  released when you stop. (If you'd rather shave ~0.2s off the recording
+  start, set `keep_mic_open` to `true`; the indicator then stays on, but
+  audio is still discarded except while recording.)
 - If the menu bar icon shows **⚠️**, click it — the first menu line
   states the exact problem, and it's almost always the Accessibility
   permission or the missing restart from step 2.
@@ -111,6 +111,7 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `hotkey` | `"alt_r"` | Push-to-talk key: `alt_r`, `alt_l`, `cmd_r`, `ctrl_r`, or `f13`–`f20`. |
 | `model_size` | `"small.en"` | Whisper model: `tiny.en` (fastest) → `medium.en` (most accurate). Use `small` (no `.en`) for non-English. |
 | `play_sounds` | `true` | Soft pop/click when recording starts, locks, and stops. |
+| `keep_mic_open` | `false` | `false`: mic is on only while recording (orange indicator = actually listening). `true`: keep the stream open for instant recording start. |
 | `append_space` | `true` | Add a trailing space after each dictation. |
 | `min_seconds` | `0.4` | Ignore recordings shorter than this (accidental taps). |
 | `double_tap_seconds` | `0.5` | Two taps within this window lock recording on. |

@@ -47,6 +47,11 @@ DEFAULT_SETTINGS = {
     "model_size": "small.en",
     # Play a subtle sound when recording starts/stops.
     "play_sounds": True,
+    # false: the microphone is opened only while you're recording, so the
+    #        orange mic indicator appears only when you dictate.
+    # true:  keep the mic stream open all the time for slightly faster
+    #        recording start (audio is still discarded unless recording).
+    "keep_mic_open": False,
     # Add a trailing space after each dictation.
     "append_space": True,
     # Ignore recordings shorter than this many seconds (accidental taps).
@@ -739,7 +744,9 @@ class FlowEngine:
 
     # ── audio ──
     def open_microphone(self):
-        """Keep the input stream open so recording starts instantly."""
+        """Open the input stream (shows macOS's orange mic indicator)."""
+        if self.stream is not None:
+            return True
         try:
             self.stream = self.sd.InputStream(
                 samplerate=SAMPLE_RATE,
@@ -753,6 +760,16 @@ class FlowEngine:
             self.stream = None
             self._fail(f"Microphone unavailable: {e}")
             return False
+
+    def close_microphone(self):
+        """Release the mic entirely (orange indicator turns off)."""
+        if self.stream is not None:
+            try:
+                self.stream.stop()
+                self.stream.close()
+            except Exception:
+                pass
+            self.stream = None
 
     def _audio_callback(self, indata, frames, time_info, status):
         if self.recording:
@@ -781,6 +798,8 @@ class FlowEngine:
         self.recording = False
         with self._frames_lock:
             self.frames = []
+        if not self.settings.get("keep_mic_open", False):
+            self.close_microphone()
         if self.state in ("recording", "locked"):
             self._set_state("ready")
 
@@ -789,6 +808,8 @@ class FlowEngine:
         with self._frames_lock:
             frames = self.frames
             self.frames = []
+        if not self.settings.get("keep_mic_open", False):
+            self.close_microphone()
         if not frames:
             self._set_state("ready")
             return
@@ -970,6 +991,12 @@ class FlowEngine:
         self._clear_error()
         if settings.get("hotkey") != old_hotkey and self._listener is not None:
             self.start_hotkey_listener()
+        # Apply a keep_mic_open change right away (unless mid-recording)
+        if not self.recording:
+            if settings.get("keep_mic_open", False):
+                self.open_microphone()
+            else:
+                self.close_microphone()
         if settings["model_size"] != old_model:
             self.switch_model(settings["model_size"])
         elif self.state == "error":
@@ -1015,7 +1042,8 @@ def main():
     if not engine.load_model():
         print(f"Error: {engine.error_message}")
         sys.exit(1)
-    engine.open_microphone()
+    if settings.get("keep_mic_open", False):
+        engine.open_microphone()
     if not engine.start_hotkey_listener():
         print(f"Error: {engine.error_message}")
         sys.exit(1)

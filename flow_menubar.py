@@ -177,7 +177,8 @@ class FlowMenuBarApp(rumps.App):
 
     def _start_engine(self):
         if self.engine.load_model():
-            self.engine.open_microphone()
+            if self.engine.settings.get("keep_mic_open", False):
+                self.engine.open_microphone()
         # Surface a broken config.json even though the model loaded fine.
         if self.config_error:
             self.engine._fail(self.config_error)
