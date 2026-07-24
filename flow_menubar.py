@@ -91,6 +91,77 @@ def copy_to_clipboard(text):
     subprocess.run(["pbcopy"], input=text.encode("utf-8"))
 
 
+# ── Toast banners ───────────────────────────────────────────────────────
+#
+# Notification Center won't reliably show notifications for a
+# script-launcher app (the permission prompt never even appears), so we
+# draw our own: a small dark banner near the menu bar. Needs no
+# permissions and ignores Focus modes. Main thread only.
+
+_toasts = []  # [(panel, expires_at)]
+
+
+def show_toast(title, message="", seconds=3.5):
+    from AppKit import (
+        NSBackingStoreBuffered,
+        NSColor,
+        NSFont,
+        NSMakeRect,
+        NSPanel,
+        NSScreen,
+        NSStatusWindowLevel,
+        NSTextField,
+        NSWindowStyleMaskBorderless,
+        NSWindowStyleMaskNonactivatingPanel,
+    )
+
+    text = f"{title}\n{message}" if message else title
+    label = NSTextField.wrappingLabelWithString_(text)
+    label.setFont_(NSFont.systemFontOfSize_(13.0))
+    label.setTextColor_(NSColor.whiteColor())
+    label.setPreferredMaxLayoutWidth_(320.0)
+    size = label.fittingSize()
+
+    pad = 14.0
+    width, height = size.width + 2 * pad, size.height + 2 * pad
+    screen = NSScreen.mainScreen() or NSScreen.screens()[0]
+    frame = screen.visibleFrame()
+    x = frame.origin.x + frame.size.width - width - 16.0
+    y = frame.origin.y + frame.size.height - height - 16.0
+
+    panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
+        NSMakeRect(x, y, width, height),
+        NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel,
+        NSBackingStoreBuffered,
+        False,
+    )
+    panel.setReleasedWhenClosed_(False)
+    panel.setLevel_(NSStatusWindowLevel)  # above normal windows
+    panel.setOpaque_(False)
+    panel.setBackgroundColor_(NSColor.clearColor())
+    content = panel.contentView()
+    content.setWantsLayer_(True)
+    content.layer().setBackgroundColor_(
+        NSColor.colorWithCalibratedRed_green_blue_alpha_(0.13, 0.13, 0.16, 0.94).CGColor()
+    )
+    content.layer().setCornerRadius_(12.0)
+    label.setFrame_(NSMakeRect(pad, pad, size.width, size.height))
+    content.addSubview_(label)
+    panel.orderFrontRegardless()  # show without stealing keyboard focus
+
+    _toasts.append((panel, time.monotonic() + seconds))
+    return panel
+
+
+def prune_toasts():
+    now = time.monotonic()
+    for entry in _toasts[:]:
+        panel, expires_at = entry
+        if now >= expires_at:
+            panel.orderOut_(None)
+            _toasts.remove(entry)
+
+
 # ── Login item helpers (osascript + System Events) ──────────────────────
 
 def login_item_exists():
@@ -250,14 +321,12 @@ class FlowMenuBarApp(rumps.App):
         e = self.engine
         self.title = ICONS.get(e.state, "🎙")
 
-        # Show queued engine notifications under Flow Local's own identity
-        # (osascript notifications get silently dropped without a grant).
+        # Show queued engine notifications as our own toast banners
+        # (Notification Center never even prompts for script-launcher apps).
+        prune_toasts()
         while e.pending_notifications:
             title, message = e.pending_notifications.pop(0)
-            try:
-                rumps.notification(title, "", message)
-            except Exception:
-                fl.show_notification(title, message)
+            show_toast(title, message)
 
         # A typing pause completes any pending edit-learning; announce
         # newly learned corrections so nothing happens silently.
@@ -266,14 +335,10 @@ class FlowMenuBarApp(rumps.App):
             self._shown_correction_version = e.correction_version
             if e.last_learned_correction:
                 wrong, fixed = e.last_learned_correction
-                try:
-                    rumps.notification(
-                        "Flow Local learned a correction",
-                        "",
-                        f'"{wrong}" will now become "{fixed}"',
-                    )
-                except Exception:
-                    pass  # notifications need the .app bundle; fine without
+                show_toast(
+                    "Learned a correction",
+                    f'"{wrong}" will now become "{fixed}"',
+                )
 
         if e.state == "error":
             status = "⚠️ " + (e.error_message or "Unknown error")
@@ -379,16 +444,16 @@ def main():
     # nothing" visible. The handle must outlive the app.
     lock = fl.acquire_single_instance_lock()
     if lock is None:
-        try:
-            rumps.notification(
-                "Flow Local is already running", "",
-                "Look for the 🎙 icon at the top-right of your screen.",
-            )
-        except Exception:
-            fl.show_notification(
-                "Flow Local is already running",
-                "Look for the 🎙 icon at the top-right of your screen.",
-            )
+        # Show the toast, give it a moment on screen, then bow out.
+        from Foundation import NSDate, NSRunLoop
+
+        show_toast(
+            "Flow Local is already running",
+            "Look for the 🎙 icon at the top-right of your screen.",
+        )
+        NSRunLoop.currentRunLoop().runUntilDate_(
+            NSDate.dateWithTimeIntervalSinceNow_(3.0)
+        )
         sys.exit(0)
 
     # Without Accessibility, dictations transcribe but can't be typed.
