@@ -19,6 +19,10 @@ import threading
 import time
 
 import rumps
+from ApplicationServices import (
+    AXIsProcessTrustedWithOptions,
+    kAXTrustedCheckOptionPrompt,
+)
 from AppKit import (
     NSEvent,
     NSEventMaskFlagsChanged,
@@ -373,6 +377,11 @@ def main():
             capture_output=True,
         )
         sys.exit(0)
+
+    # Without Accessibility, dictations transcribe but can't be typed.
+    # This shows macOS's own grant dialog on first run and adds Flow Local
+    # to the Accessibility list (System Settings > Privacy & Security).
+    AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
 
     settings, config_error = fl.load_settings()
     engine = fl.FlowEngine(settings)
