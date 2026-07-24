@@ -44,20 +44,40 @@ Prefer no app bundle? `bash run.sh` runs the same engine in a terminal.
 
 ### Permissions walkthrough (one time)
 
-macOS will prompt for two permissions the first time; if a prompt doesn't
-appear, grant them manually in **System Settings → Privacy & Security** for
-**Flow Local** (or **Terminal** when using `run.sh`):
+Flow Local needs exactly two macOS permissions, and the app walks you
+through them. Here's what to expect on first launch, in order:
 
-1. **Microphone** — to hear you.
-2. **Accessibility** — to type the text into other apps (and to watch for
-   the hotkey).
+1. **Accessibility** — lets Flow Local type text into other apps. The
+   first launch pops up macOS's own dialog: click **Open System
+   Settings**, find **Flow Local** in the Accessibility list, and switch
+   it on (macOS asks for your password/Touch ID). Missed the dialog? Go
+   to **System Settings → Privacy & Security → Accessibility** manually.
+2. **Restart the app once.** Permissions only apply to a freshly started
+   app: click the menu bar **🎙 → Quit Flow Local**, then reopen it from
+   Spotlight. This step is not optional — skipping it is the #1 reason
+   for "it transcribes but nothing gets typed."
+3. **Microphone** — macOS asks the first time you actually record
+   (hold the hotkey and speak). Click Allow.
 
-After granting Accessibility, quit and reopen the app once (menu bar 🎙 →
-Quit Flow Local, then relaunch). The terminal mode additionally needs
-**Input Monitoring** for its hotkey listener.
+Good to know, so nothing surprises you:
 
-> `make_app.sh` always builds with the same name and bundle id
-> (`local.flow.dictation`), so rebuilding never resets your permissions.
+- Opening the app shows **no window and no Dock icon** — it lives
+  entirely in the menu bar (the 🎙 at the top-right of your screen).
+  Opening it a second time just shows an "already running" notification.
+- The **orange microphone indicator** stays on the whole time Flow Local
+  runs. That's because the mic stream is kept open so recording starts
+  the instant you press the hotkey — but audio is only *kept* while
+  you're actually recording; everything else is discarded as it arrives,
+  and nothing ever leaves your Mac.
+- If the menu bar icon shows **⚠️**, click it — the first menu line
+  states the exact problem, and it's almost always the Accessibility
+  permission or the missing restart from step 2.
+- `make_app.sh` always builds with the same name and bundle id
+  (`local.flow.dictation`), so rebuilding or updating never resets your
+  permissions.
+- Terminal mode (`run.sh`) is separate: it runs under **Terminal's**
+  permissions instead (Microphone + Accessibility + Input Monitoring
+  for its hotkey listener).
 
 ## Using it
 
