@@ -99,6 +99,7 @@ Good to know, so nothing surprises you:
 | Switch model | Menu bar 🎙 → **Model** (downloads on first use, no restart needed) |
 | Change settings | Menu bar 🎙 → **Open Settings file**, edit, then **Reload settings** |
 | Start at login | Menu bar 🎙 → **Launch at Login** |
+| Fix a glitchy session | Menu bar 🎙 → **Restart Flow Local** |
 
 Menu bar icon states: 🎙 ready · 🔴 recording · 🔴🔒 locked recording ·
 💬 transcribing · ⏳ loading a model · ⚠️ error (the reason appears as the

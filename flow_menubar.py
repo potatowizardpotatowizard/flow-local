@@ -228,6 +228,7 @@ class FlowMenuBarApp(rumps.App):
             rumps.MenuItem("Reload settings", callback=self.on_reload_settings),
             self.login_item,
             None,
+            rumps.MenuItem("Restart Flow Local", callback=self.on_restart),
             rumps.MenuItem("Quit Flow Local", callback=self.on_quit),
         ]
 
@@ -428,6 +429,27 @@ class FlowMenuBarApp(rumps.App):
                 return
             add_login_item()
         item.state = 1 if login_item_exists() else 0
+
+    def on_restart(self, _item):
+        """Quit and come back fresh - the cure for a glitched session.
+
+        A detached helper waits for this process to exit (releasing the
+        single-instance lock) and then launches a new one.
+        """
+        self.engine.shutdown()
+        if os.path.exists(APP_BUNDLE_PATH):
+            subprocess.Popen(
+                ["/bin/bash", "-c", 'sleep 1; open "$0"', APP_BUNDLE_PATH],
+                start_new_session=True,
+            )
+        else:
+            # Running straight from the terminal (no .app built yet)
+            subprocess.Popen(
+                ["/bin/bash", "-c", 'sleep 1; exec "$0" "$1"',
+                 sys.executable, os.path.abspath(__file__)],
+                start_new_session=True,
+            )
+        rumps.quit_application()
 
     def on_quit(self, _item):
         self.engine.shutdown()
