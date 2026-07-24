@@ -13,7 +13,9 @@ is in front. Email, Slack, docs, code review comments, anywhere.
   spoken punctuation ("comma", "period", "new paragraph"), fixes
   capitalization, applies your personal auto-corrections.
 - 🗣 **Knows your words** — teach it names and jargon in a personal
-  dictionary so Whisper stops mangling them.
+  dictionary, and it also **learns automatically**: unusual words you
+  dictate are remembered (locally, in `learned_words.json`) and hinted
+  back to Whisper, so recognition of *your* vocabulary improves with use.
 - ↩️ **"Scratch that"** — say it to erase the last dictation.
 
 Total footprint is about 1 GB, mostly the Whisper model.
@@ -94,10 +96,13 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `spoken_punctuation` | `{"comma": ",", …}` | Say the key, get the value. Add your own (`"smiley": "🙂"`). Values may contain `\n`. |
 | `spoken_punctuation_mode` | `"smart"` | `smart` converts spoken punctuation but leaves obvious noun uses alone ("the trial period ends", "an Oxford comma"). `always` converts every occurrence; `off` disables conversion. |
 | `vocabulary` | `[]` | Names/jargon hinted to Whisper so it recognizes them, e.g. `["Benjiman", "kubectl"]`. |
+| `auto_learn_vocabulary` | `true` | Mine each dictation for unusual words (not in the system dictionary) and remember them in `learned_words.json`. Words seen twice get hinted to Whisper alongside `vocabulary`; "scratch that" un-learns the erased text. Set `false` to only use the manual list. |
 | `corrections` | `{}` | Forced post-fixes, e.g. `{"cloud code": "Claude Code"}`. Case-insensitive, whole words. |
 
-`config.json` is `.gitignore`d because it tends to accumulate personal
-names and vocabulary; a fresh clone regenerates the defaults.
+`config.json` and `learned_words.json` are `.gitignore`d because they
+accumulate personal names and vocabulary; a fresh clone regenerates
+defaults and starts learning from scratch. Both live in this folder, never
+leave your Mac, and can be opened, edited, or deleted anytime.
 
 ## Troubleshooting
 
@@ -125,6 +130,10 @@ names and vocabulary; a fresh clone regenerates the defaults.
   exits quietly (single-instance lock).
 
 ## How it compares to Wispr Flow
+
+> Flow Local is an independent open-source project. It is not affiliated
+> with, endorsed by, or connected to Wispr Inc. (makers of Wispr Flow) or
+> OpenAI (creators of the Whisper speech model it runs locally).
 
 Honest version: [Wispr Flow](https://wisprflow.ai) is a polished commercial
 product with cloud-scale accuracy, AI rewriting/tone matching, context

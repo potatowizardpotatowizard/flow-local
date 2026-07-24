@@ -11,3 +11,6 @@ __pycache__/
 # personal names, so it stays out of the repo. Flow Local recreates it
 # with defaults on first run.
 config.json
+
+# Words auto-learned from your dictations — personal data, never shared.
+learned_words.json

@@ -29,6 +29,8 @@ import time
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(APP_DIR, "config.json")
 LOCK_PATH = os.path.join(APP_DIR, ".flow-local.lock")
+LEARNED_PATH = os.path.join(APP_DIR, "learned_words.json")
+SYSTEM_DICT_PATH = "/usr/share/dict/words"
 
 SAMPLE_RATE = 16000
 
@@ -81,6 +83,10 @@ DEFAULT_SETTINGS = {
     # Names and jargon Whisper should recognize (passed as a hint to the
     # model). Example: ["Benjiman", "Claude Code", "kubectl"]
     "vocabulary": [],
+    # Automatically learn unusual words (names, jargon) from what you
+    # dictate, so Whisper recognizes them next time. Stored locally in
+    # learned_words.json; words you "scratch" are un-learned.
+    "auto_learn_vocabulary": True,
     # Forced fixes applied after transcription (case-insensitive match).
     # Example: {"cloud code": "Claude Code"}
     "corrections": {},
@@ -105,6 +111,10 @@ def load_settings():
         return dict(DEFAULT_SETTINGS), f"config.json could not be read: {e}"
     merged = dict(DEFAULT_SETTINGS)
     merged.update(user)
+    # Write back any settings introduced by an update, so they're visible
+    # (with their defaults) when you open the file.
+    if any(key not in user for key in DEFAULT_SETTINGS):
+        save_settings(merged)
     return merged, None
 
 
@@ -250,6 +260,134 @@ def is_scratch_command(text):
     return bare in ("scratch that", "delete that")
 
 
+# ──────────────── Personal dictionary that learns ──────────────────────
+#
+# Whisper accepts a text hint (initial_prompt) that biases it toward
+# words it should expect. Besides the manual `vocabulary` list, Flow
+# Local mines every dictation for unusual words — names, jargon, anything
+# not in the system dictionary — and keeps score in learned_words.json.
+# Words seen at least twice get fed back to Whisper, so recognition of
+# *your* words improves the more you dictate. Everything stays on disk,
+# locally. "Scratch that" un-learns the words of the erased dictation.
+
+LEARNED_STORE_LIMIT = 500  # most words kept on disk
+PROMPT_WORD_LIMIT = 50     # most words hinted to Whisper per dictation
+LEARNED_MIN_COUNT = 2      # times seen before a word is hinted
+
+
+def load_system_dictionary():
+    """Lowercased set of common English words (macOS ships one)."""
+    try:
+        with open(SYSTEM_DICT_PATH, encoding="utf-8") as f:
+            return {line.strip().lower() for line in f if line.strip()}
+    except OSError:
+        return set()
+
+
+def load_learned_words():
+    try:
+        with open(LEARNED_PATH, encoding="utf-8") as f:
+            store = json.load(f)
+        return store if isinstance(store, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_learned_words(store):
+    with open(LEARNED_PATH, "w", encoding="utf-8") as f:
+        json.dump(store, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
+def _in_dictionary(word, system_dict):
+    """Membership check that tolerates simple plural/verb endings, since
+    the system word list only has base forms ("documents" -> "document")."""
+    w = word.lower()
+    forms = {w}
+    if w.endswith("s"):
+        forms.add(w[:-1])
+    if w.endswith(("es", "ed", "ly")):
+        forms.add(w[:-2])
+    if w.endswith("d"):
+        forms.add(w[:-1])
+    if w.endswith("ing"):
+        forms.update({w[:-3], w[:-3] + "e"})
+    return any(f in system_dict for f in forms)
+
+
+def extract_learnable_words(text, system_dict, already_known=()):
+    """Words in a dictation worth remembering.
+
+    Anything not in the system dictionary (jargon, unusual names) is
+    learnable — words the dictionary knows, Whisper already spells fine.
+    Without a system dictionary, fall back to mid-sentence capitalized
+    words (proper nouns). Contractions are skipped.
+    """
+    known = {w.lower() for w in already_known}
+    found = []
+    for match in re.finditer(r"[A-Za-z][A-Za-z'-]*", text):
+        word = match.group(0)
+        if len(word) < 3 or "'" in word or word.lower() in known:
+            continue
+        if system_dict:
+            learnable = not _in_dictionary(word, system_dict)
+        else:
+            before = text[: match.start()].rstrip(" \"'")
+            at_sentence_start = not before or before[-1] in ".!?\n"
+            learnable = (
+                word[0].isupper() and word[1:].islower() and not at_sentence_start
+            )
+        if learnable:
+            found.append(word)
+    return found
+
+
+def learn_words(store, text, system_dict, settings):
+    """Update the learned-words store from one dictation."""
+    vocabulary = settings.get("vocabulary", [])
+    today = time.strftime("%Y-%m-%d")
+    for word in extract_learnable_words(text, system_dict, vocabulary):
+        entry = store.setdefault(word.lower(), {"text": word, "count": 0, "last": today})
+        entry["count"] += 1
+        entry["last"] = today
+        entry["text"] = word  # remember the casing most recently used
+    if len(store) > LEARNED_STORE_LIMIT:
+        ranked = sorted(
+            store.items(), key=lambda kv: (kv[1]["count"], kv[1]["last"]), reverse=True
+        )
+        store.clear()
+        store.update(dict(ranked[:LEARNED_STORE_LIMIT]))
+
+
+def unlearn_words(store, text):
+    """Walk back the counts for an erased ("scratch that") dictation."""
+    for match in re.finditer(r"[A-Za-z][A-Za-z'-]*", text):
+        key = match.group(0).lower()
+        entry = store.get(key)
+        if entry:
+            entry["count"] -= 1
+            if entry["count"] <= 0:
+                del store[key]
+
+
+def build_initial_prompt(settings, store):
+    """The vocabulary hint passed to Whisper: manual words first, then the
+    best-established learned words, deduplicated, capped."""
+    words = []
+    seen = set()
+    learned = sorted(
+        store.values(), key=lambda e: (-e["count"], e["last"]), reverse=False
+    )
+    manual = list(settings.get("vocabulary", []))
+    for word in manual + [e["text"] for e in learned if e["count"] >= LEARNED_MIN_COUNT]:
+        if word.lower() not in seen:
+            seen.add(word.lower())
+            words.append(word)
+        if len(words) >= PROMPT_WORD_LIMIT:
+            break
+    return ("Vocabulary: " + ", ".join(words)) if words else None
+
+
 # ──────────────────────────── macOS helpers ────────────────────────────
 
 
@@ -371,6 +509,10 @@ class FlowEngine:
         self.stream = None
 
         self._last_pasted = ""  # exact last insertion, for "scratch that"
+
+        # Personal dictionary that improves with use
+        self.learned = load_learned_words()
+        self._system_dict = load_system_dictionary()
 
         # Hotkey state machine
         self._mode = "idle"  # idle | hold | locked
@@ -494,8 +636,7 @@ class FlowEngine:
             return
         t0 = time.time()
         language = "en" if self.model_size.endswith(".en") else None
-        vocabulary = self.settings.get("vocabulary", [])
-        initial_prompt = ("Vocabulary: " + ", ".join(vocabulary)) if vocabulary else None
+        initial_prompt = build_initial_prompt(self.settings, self.learned)
         try:
             with self._model_lock:
                 segments, _info = self.model.transcribe(
@@ -535,6 +676,9 @@ class FlowEngine:
         self._last_pasted = inserted
         self._clear_error()
         self._remember(text, duration)
+        if self.settings.get("auto_learn_vocabulary", True):
+            learn_words(self.learned, text, self._system_dict, self.settings)
+            save_learned_words(self.learned)
         self._set_state("ready")
         self.on_event(
             "result",
@@ -564,6 +708,10 @@ class FlowEngine:
                 self.total_words -= entry["words"]
                 self.total_audio_seconds -= entry["seconds"]
                 self.history_version += 1
+                # A scratched dictation was probably misheard — un-learn it.
+                if self.settings.get("auto_learn_vocabulary", True):
+                    unlearn_words(self.learned, entry["text"])
+                    save_learned_words(self.learned)
             self._last_pasted = ""
             self._set_state("ready")
         else:

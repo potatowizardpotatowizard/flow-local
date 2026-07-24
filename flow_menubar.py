@@ -237,9 +237,10 @@ class FlowMenuBarApp(rumps.App):
             self._last_status = status
 
         minutes = e.minutes_saved()
-        self.stats_item.title = (
-            f"Session: {e.total_words} words · ~{minutes:.1f} min of typing saved"
-        )
+        stats = f"Session: {e.total_words} words · ~{minutes:.1f} min of typing saved"
+        if e.settings.get("auto_learn_vocabulary", True):
+            stats += f" · {len(e.learned)} learned words"
+        self.stats_item.title = stats
 
         if e.history_version != self._shown_history_version:
             self._rebuild_history()

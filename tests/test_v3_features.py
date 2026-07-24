@@ -156,6 +156,16 @@ def test_user_overrides_merge_with_defaults(tmp_path, monkeypatch):
     assert settings["model_size"] == "small.en"     # default filled in
     assert settings["fillers"] == DEFAULT_SETTINGS["fillers"]
 
+def test_newly_introduced_settings_written_back(tmp_path, monkeypatch):
+    cfg = tmp_path / "config.json"
+    cfg.write_text(json.dumps({"hotkey": "cmd_r"}))
+    monkeypatch.setattr(flow_local, "CONFIG_PATH", str(cfg))
+    load_settings()
+    on_disk = json.loads(cfg.read_text())
+    assert on_disk["hotkey"] == "cmd_r"                    # user value kept
+    assert on_disk["auto_learn_vocabulary"] is True        # new key now visible
+    assert on_disk["spoken_punctuation_mode"] == "smart"
+
 def test_broken_config_returns_defaults_and_error(tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text("{ this is not json")
