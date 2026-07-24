@@ -250,6 +250,15 @@ class FlowMenuBarApp(rumps.App):
         e = self.engine
         self.title = ICONS.get(e.state, "🎙")
 
+        # Show queued engine notifications under Flow Local's own identity
+        # (osascript notifications get silently dropped without a grant).
+        while e.pending_notifications:
+            title, message = e.pending_notifications.pop(0)
+            try:
+                rumps.notification(title, "", message)
+            except Exception:
+                fl.show_notification(title, message)
+
         # A typing pause completes any pending edit-learning; announce
         # newly learned corrections so nothing happens silently.
         e.edit_watcher.tick(time.monotonic())
@@ -370,13 +379,16 @@ def main():
     # nothing" visible. The handle must outlive the app.
     lock = fl.acquire_single_instance_lock()
     if lock is None:
-        subprocess.run(
-            ["osascript", "-e",
-             'display notification '
-             '"Look for the 🎙 icon at the top-right of your screen." '
-             'with title "Flow Local is already running"'],
-            capture_output=True,
-        )
+        try:
+            rumps.notification(
+                "Flow Local is already running", "",
+                "Look for the 🎙 icon at the top-right of your screen.",
+            )
+        except Exception:
+            fl.show_notification(
+                "Flow Local is already running",
+                "Look for the 🎙 icon at the top-right of your screen.",
+            )
         sys.exit(0)
 
     # Without Accessibility, dictations transcribe but can't be typed.

@@ -735,6 +735,11 @@ class FlowEngine:
         self.last_learned_correction = None
         self.correction_version = 0
 
+        # (title, message) pairs for the frontend to display as
+        # notifications — the menu bar app drains this on its UI timer so
+        # notifications come from Flow Local's own identity.
+        self.pending_notifications = []
+
         # Hotkey state machine
         self._mode = "idle"  # idle | hold | locked
         self._press_time = 0.0
@@ -915,7 +920,10 @@ class FlowEngine:
         if self.settings.get("copy_when_no_text_field", True) and not focused_element_is_editable():
             subprocess.run(["pbcopy"], input=text.encode("utf-8"))
             preview = text if len(text) <= 60 else text[:60] + "…"
-            show_notification("Flow Local — copied to clipboard", f"“{preview}”")
+            play_sound("Purr", self.settings)  # audible cue: it went to the clipboard
+            self.pending_notifications.append(
+                ("Copied to clipboard", f"“{preview}” — paste it anywhere with ⌘V")
+            )
             self._last_pasted = ""  # nothing on screen for "scratch that"
             self._clear_error()
             self._remember(text, duration)
@@ -1123,6 +1131,9 @@ def main():
     try:
         while True:
             time.sleep(1)
+            while engine.pending_notifications:
+                title, message = engine.pending_notifications.pop(0)
+                print(f"  {title}: {message}")
             if engine.state == "error" and engine.error_message:
                 print(f"⚠️  {engine.error_message}")
                 engine.error_message = ""
