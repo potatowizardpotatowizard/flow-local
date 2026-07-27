@@ -624,10 +624,6 @@ def show_notification(title, message):
     )
 
 
-# kAXErrorNoValue: the "focused element" attribute exists but has no value,
-# i.e. macOS is POSITIVE that nothing has keyboard focus.
-_AX_NO_VALUE = -25212
-
 # Roles that are definitely not text input. Everything not listed here is
 # given the benefit of the doubt, because many apps (Electron/web apps
 # especially) report vague roles for perfectly good chat boxes.
@@ -644,13 +640,14 @@ def focused_element_is_editable():
     """Whether keyboard focus is in something that accepts typed text.
 
     Biased toward typing: dictation only diverts to the clipboard when
-    macOS positively reports that nothing has focus, or the focused
-    element has a role that is clearly not text input (a button, a file
-    list, the desktop). Vague roles, unknown roles, and any Accessibility
-    errors all mean "type as usual" - lots of apps (Electron/web apps in
-    particular) describe their chat boxes vaguely or not at all, and
-    diverting those to the clipboard on every dictation is far worse than
-    occasionally typing into a non-field (which is a no-op).
+    the focused element has a role that is clearly not text input (a
+    button, a file list, the desktop's icon view). Everything else -
+    vague roles, unknown roles, Accessibility errors, and even "no
+    focused element" answers - means "type as usual": Electron/web apps
+    (Claude, Slack, Discord) report kAXErrorNoValue or vague roles for
+    perfectly good chat boxes, and diverting those to the clipboard on
+    every dictation is far worse than occasionally typing into a
+    non-field (the text also stays available in the History menu).
     """
     try:
         from AppKit import NSWorkspace
@@ -665,10 +662,15 @@ def focused_element_is_editable():
             return True
         app = AXUIElementCreateApplication(front.processIdentifier())
         err, focused = AXUIElementCopyAttributeValue(app, "AXFocusedUIElement", None)
-        if err == _AX_NO_VALUE or (err == 0 and focused is None):
-            return False  # macOS is sure: nothing focused (desktop, empty space)
+        # kAXErrorNoValue is NOT proof that nothing has focus: Electron
+        # apps (Claude, Slack, Discord) report it even while a chat box
+        # is focused and accepting keystrokes. Only a positively
+        # identified non-text element (role check below) diverts to the
+        # clipboard; the true desktop case is caught there too, because
+        # the desktop reports as an AXScrollArea. Anything ambiguous
+        # types as usual - a mis-typed dictation is still in History.
         if err != 0 or focused is None:
-            return True  # can't tell - type as usual
+            return True
         err, role = AXUIElementCopyAttributeValue(focused, "AXRole", None)
         if err != 0 or role not in _NON_EDITABLE_ROLES:
             return True  # editable, vague, or unknown - type as usual

@@ -155,10 +155,11 @@ leave your Mac, and can be opened, edited, or deleted anytime.
   way the text is on your clipboard - ⌘V pastes it.)
 - **It copies to the clipboard even though you're in a chat box**: fixed -
   the focus check now only diverts to the clipboard when macOS positively
-  reports nothing focused or a clearly non-text control (a button, a file
-  list, the desktop). Apps that describe their text boxes vaguely (many
-  chat and web apps) get typed into as normal. If you still see it in
-  some app, set `copy_when_no_text_field` to `false` to always type.
+  identifies a clearly non-text control (a button, a file list, the
+  desktop). Everything ambiguous - including the "no focused element"
+  answer Electron apps (Claude, Slack, Discord) give for perfectly good
+  chat boxes - gets typed into as normal. If you still see it in some
+  app, set `copy_when_no_text_field` to `false` to always type.
 - **Hotkey does nothing**: Accessibility permission (Input Monitoring for
   terminal mode). Also check `hotkey` in config.json is a supported name.
 - **"no speech detected"**: Microphone permission, or the wrong input
