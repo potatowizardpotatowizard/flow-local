@@ -79,3 +79,55 @@ def test_default_is_on():
 
 def test_function_is_pure_string_level():
     assert apply_self_corrections("at five. I mean six") == "at six"
+
+
+# ── v2: more markers, carrier words, chains, new scratch phrases ────────
+
+from flow_local import is_scratch_command
+
+
+def test_repeated_carrier_word():
+    # Benjiman's real dictation that slipped through v1
+    assert clean_text("I'm going to have a meeting at five, I mean, at six.") == (
+        "I'm going to have a meeting at six."
+    )
+
+def test_no_wait_marker():
+    assert clean_text("meet on Tuesday, no wait, Wednesday") == "Meet on Wednesday"
+
+def test_wait_no_marker():
+    assert clean_text("at 5, wait no, 6") == "At 6"
+
+def test_i_meant_to_say_marker():
+    assert clean_text("send it to Sarah, I meant to say Benjamin") == (
+        "Send it to Benjamin"
+    )
+
+def test_make_that_marker():
+    assert clean_text("the meeting is at 5, make that 6") == "The meeting is at 6"
+
+def test_sorry_marker():
+    assert clean_text("it costs fifty, sorry, sixty dollars") == (
+        "It costs sixty dollars"
+    )
+
+def test_chained_corrections():
+    assert clean_text("at five, I mean six, no wait seven") == "At seven"
+
+def test_carrier_with_mismatched_kinds_untouched():
+    assert clean_text("at five, I mean, at some point") == (
+        "At five, I mean, at some point"
+    )
+
+def test_sorry_as_apology_untouched():
+    assert clean_text("I broke it, sorry about that") == "I broke it, sorry about that"
+
+
+def test_new_scratch_phrases():
+    assert is_scratch_command("I didn't mean to say that.")
+    assert is_scratch_command("I didn't mean that")
+    assert is_scratch_command("undo that")
+    assert is_scratch_command("erase that")
+
+def test_scratch_requires_exact_phrase():
+    assert not is_scratch_command("I didn't mean to say that about Sarah")

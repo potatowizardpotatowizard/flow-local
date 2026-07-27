@@ -100,6 +100,12 @@ DEFAULT_SETTINGS = {
     # of "I mean" look like the same kind of thing (two numbers/times, or
     # two capitalized names), so "I mean, that's wild" is never touched.
     "self_corrections": True,
+    # Check the git remote for a newer version at launch and show a
+    # notification if there is one (it never installs on its own). Off by
+    # default so Flow Local makes zero network requests unless you ask.
+    # Updating manually is always available: menu bar 🎙 -> Check for
+    # Updates.
+    "check_updates_on_launch": False,
     # When no text field is focused (e.g. you're just on the desktop),
     # keep the dictation on the clipboard and show a notification instead
     # of typing into nowhere. Set false to always attempt the paste.
@@ -230,6 +236,10 @@ def clean_text(text, settings=None):
     if s.get("self_corrections", True):
         text = apply_self_corrections(text)
 
+    # Spoken quotes: "quote ... end quote" -> "..."
+    if mode != "off":
+        text = apply_spoken_quotes(text)
+
     # Collapse runs of whitespace
     text = re.sub(r"\s+", " ", text)
 
@@ -261,6 +271,12 @@ def clean_text(text, settings=None):
         text = text[0].upper() + text[1:]
         text = re.sub(r"([.!?]\s+)([a-z])", _cap, text)
         text = re.sub(r"(\n+)([a-z])", _cap, text)
+        # Quoted speech starts a sentence too ('she said, "hello' and a
+        # dictation that opens on a quote), but a quoted word mid-phrase
+        # ('the word "flow"') keeps its case.
+        text = re.sub(r'([.!?,]\s+")([a-z])', _cap, text)
+        if text[0] == '"' and len(text) > 1:
+            text = '"' + text[1].upper() + text[2:]
 
     return text
 
@@ -287,8 +303,25 @@ def _is_nameish(word):
     return word[:1].isupper() and word[1:].islower() and word.isalpha()
 
 
+# Phrases that signal "the next thing replaces the last thing". Longer
+# phrases come before their prefixes ("I meant to say" before "I mean")
+# so the alternation prefers them.
+_CORRECTION_MARKER = (
+    r"(?:I\s+meant\s+to\s+say|I\s+mean[t]?|no,?\s+wait|wait,?\s+no|"
+    r"make\s+that|sorry|actually)"
+)
+
+# Little words that often ride along with the corrected word ("at five,
+# I mean, AT six"): allowed on either side and kept in the result.
+_CARRIER = r"(?:at|on|in|to|by|for|with|around|until|the|a|an)"
+
+
 def apply_self_corrections(text):
     """Resolve "X, I mean Y" slips by keeping Y and dropping X.
+
+    Recognized markers: "I mean(t)", "I meant to say", "no wait",
+    "wait no", "make that", "sorry", "actually". A repeated little word
+    is tolerated and kept ("at five, I mean, at six" -> "at six").
 
     Only fires when X and Y look like the same kind of thing - both
     numbers/times or both capitalized names - so the discourse-marker use
@@ -296,22 +329,103 @@ def apply_self_corrections(text):
     scope ("that's crazy. I mean it's wild") pass through unchanged.
     """
     token = r"[A-Za-z0-9][A-Za-z0-9:'-]*"
+    pattern = (
+        r"(?:(?P<c1>" + _CARRIER + r")\s+)?"
+        r"(?P<x>" + token + r")"
+        r"\s*[,.;!?]*\s+"
+        + _CORRECTION_MARKER +
+        r"[,.]?\s+"
+        r"(?:(?P<c2>" + _CARRIER + r")\s+)?"
+        r"(?P<y>" + token + r")"
+    )
 
     def _swap(match):
-        before, after = match.group(1), match.group(2)
+        before, after = match.group("x"), match.group("y")
         if before.lower() != after.lower() and (
             (_is_numberish(before) and _is_numberish(after))
             or (_is_nameish(before) and _is_nameish(after))
         ):
-            return after
+            carrier = match.group("c2") or match.group("c1")
+            return (carrier + " " + after) if carrier else after
         return match.group(0)
 
-    return re.sub(
-        r"(" + token + r")\s*[,.;!?]*\s+I mean[t]?,?\s+(" + token + r")",
-        _swap,
-        text,
-        flags=re.IGNORECASE,
-    )
+    # Chained slips resolve one layer per pass ("at five, I mean six,
+    # no wait seven" -> "at six, no wait seven" -> "at seven").
+    for _ in range(5):
+        fixed = re.sub(pattern, _swap, text, flags=re.IGNORECASE)
+        if fixed == text:
+            break
+        text = fixed
+    return text
+
+
+# ── Spoken quotes ("quote ... end quote" -> "...") ──────────────────────
+
+_QUOTE_OPEN = "\x02"  # placeholders so the spacing passes can't collide
+_QUOTE_CLOSE = "\x03"
+
+_SPOKEN_QUOTE_RE = re.compile(
+    r"\b(?:(?P<open>(?:open|begin)\s+quotes?)"
+    r"|(?P<close>(?:end|close)\s+quotes?|unquote)"
+    r"|(?P<bare>quote))\b",
+    re.IGNORECASE,
+)
+
+# A bare "quote" right after one of these is the noun/verb, not a command
+# ("the quote", "a quote", "to quote Ben").
+_QUOTE_NOUN_HINTS = {
+    "a", "an", "the", "this", "that", "my", "your", "his", "her",
+    "their", "our", "its", "to",
+}
+
+
+def apply_spoken_quotes(text):
+    """Convert spoken quote commands into real, well-spaced quotation marks.
+
+    "open quote"/"begin quote" always opens; "end quote"/"close quote"/
+    "unquote" closes an open quote. A bare "quote" opens only when a close
+    command appears later in the same dictation and it doesn't read as a
+    noun ("the quote", "to quote Ben" stay literal). Orphan close commands
+    with nothing open stay literal too.
+    """
+    matches = list(_SPOKEN_QUOTE_RE.finditer(text))
+    if not matches:
+        return text
+
+    close_later = [False] * len(matches)  # is a close command still ahead?
+    seen = False
+    for i in range(len(matches) - 1, -1, -1):
+        close_later[i] = seen
+        if matches[i].group("close"):
+            seen = True
+
+    out, pos, inside = [], 0, False
+    for i, match in enumerate(matches):
+        replacement = None
+        if match.group("close"):
+            if inside:
+                replacement, inside = _QUOTE_CLOSE, False
+        elif match.group("open"):
+            if not inside:
+                replacement, inside = _QUOTE_OPEN, True
+        else:  # bare "quote"
+            words = re.findall(r"[A-Za-z']+", text[max(0, match.start() - 30):match.start()])
+            noun_use = bool(words) and words[-1].lower() in _QUOTE_NOUN_HINTS
+            if not inside and not noun_use and close_later[i]:
+                replacement, inside = _QUOTE_OPEN, True
+        if replacement:
+            out.append(text[pos:match.start()])
+            out.append(replacement)
+            pos = match.end()
+    out.append(text[pos:])
+    text = "".join(out)
+
+    # Spacing: punctuation tucks inside the closing quote, and neither
+    # mark has a space on its inside face.
+    text = re.sub(r"\s*" + _QUOTE_CLOSE + r"\s*([.!?,;:]+)", r'\1"', text)
+    text = re.sub(r"\s*" + _QUOTE_CLOSE + r"\s*", '" ', text)
+    text = re.sub(r"\s*" + _QUOTE_OPEN + r"\s*", ' "', text)
+    return text
 
 
 def apply_corrections(text, corrections):
@@ -327,9 +441,12 @@ def apply_corrections(text, corrections):
 
 
 def is_scratch_command(text):
-    """True if the dictation is only "scratch that" / "delete that"."""
+    """True if the dictation is only an erase command ("scratch that")."""
     bare = re.sub(r"[^a-z ]", "", text.lower()).strip()
-    return bare in ("scratch that", "delete that")
+    return bare in (
+        "scratch that", "delete that", "undo that", "erase that",
+        "i didnt mean to say that", "i didnt mean that",
+    )
 
 
 # ──────────────── Personal dictionary that learns ──────────────────────

@@ -43,6 +43,7 @@ from AppKit import (
 import flow_local as fl
 
 APP_BUNDLE_PATH = os.path.expanduser("~/Applications/Flow Local.app")
+REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # The hotkey is watched with a native NSEvent global monitor rather than
 # pynput: pynput's listener thread calls Text Services APIs that crash
@@ -228,9 +229,13 @@ class FlowMenuBarApp(rumps.App):
             rumps.MenuItem("Reload settings", callback=self.on_reload_settings),
             self.login_item,
             None,
+            rumps.MenuItem("Check for Updates", callback=self.on_check_updates),
             rumps.MenuItem("Restart Flow Local", callback=self.on_restart),
             rumps.MenuItem("Quit Flow Local", callback=self.on_quit),
         ]
+
+        self._update_thread = None
+        self._restart_pending = False
 
         self.login_item.state = 1 if login_item_exists() else 0
         self._sync_model_checkmarks()
@@ -246,6 +251,14 @@ class FlowMenuBarApp(rumps.App):
 
         # Load the model without blocking the menu bar.
         threading.Thread(target=self._start_engine, daemon=True).start()
+
+        # Optional launch-time update check (off by default; it only
+        # notifies - installing is always a deliberate menu click).
+        if self.engine.settings.get("check_updates_on_launch", False):
+            def _startup_check():
+                time.sleep(15)  # let the model load and the network settle
+                self._check_updates(install=False)
+            threading.Thread(target=_startup_check, daemon=True).start()
 
     def _start_engine(self):
         if self.engine.load_model():
@@ -328,6 +341,12 @@ class FlowMenuBarApp(rumps.App):
         while e.pending_notifications:
             title, message = e.pending_notifications.pop(0)
             show_toast(title, message)
+
+        # A finished update restarts the app - from the main thread only.
+        if self._restart_pending:
+            self._restart_pending = False
+            self.on_restart(None)
+            return
 
         # A typing pause completes any pending edit-learning; announce
         # newly learned corrections so nothing happens silently.
@@ -429,6 +448,90 @@ class FlowMenuBarApp(rumps.App):
                 return
             add_login_item()
         item.state = 1 if login_item_exists() else 0
+
+    # ── updater (git pull from the repo this app runs out of) ──
+    def on_check_updates(self, _item):
+        if self._update_thread and self._update_thread.is_alive():
+            return
+        self._notify("Checking for updates…")
+        self._update_thread = threading.Thread(
+            target=self._check_updates, daemon=True
+        )
+        self._update_thread.start()
+
+    def _notify(self, title, message=""):
+        """Thread-safe toast: queued for sync_ui to show on the main thread."""
+        self.engine.pending_notifications.append((title, message))
+
+    def _check_updates(self, install=True):
+        """Fetch the git remote; pull, reinstall deps, and restart if newer.
+
+        With install=False (the launch-time check) it only notifies that
+        an update exists. Runs on a background thread - never touch the
+        UI directly from here.
+        """
+        def git(*args, timeout=120):
+            return subprocess.run(
+                ["git", "-C", REPO_DIR, *args],
+                capture_output=True, text=True, timeout=timeout,
+            )
+
+        try:
+            if git("rev-parse", "--is-inside-work-tree").returncode != 0:
+                self._notify(
+                    "Can't check for updates",
+                    "This copy of Flow Local isn't a git checkout.",
+                )
+                return
+            if git("fetch", "--quiet").returncode != 0:
+                self._notify(
+                    "Couldn't reach the update server",
+                    "Check your internet connection and try again.",
+                )
+                return
+            behind = git("rev-list", "--count", "HEAD..@{upstream}")
+            if behind.returncode != 0:
+                self._notify(
+                    "Can't check for updates",
+                    "No upstream branch is configured for this checkout.",
+                )
+                return
+            count = int(behind.stdout.strip() or "0")
+            if count == 0:
+                version = git("rev-parse", "--short", "HEAD").stdout.strip()
+                self._notify("Flow Local is up to date", f"Version {version}.")
+                return
+            if not install:
+                self._notify(
+                    "Flow Local update available",
+                    f"{count} new change{'s' if count != 1 else ''} - "
+                    "click 🎙 → Check for Updates to install.",
+                )
+                return
+            before = git("rev-parse", "HEAD").stdout.strip()
+            if git("pull", "--ff-only", "--quiet").returncode != 0:
+                self._notify(
+                    "Couldn't update automatically",
+                    f"This checkout has local changes - run 'git pull' in "
+                    f"{REPO_DIR} yourself.",
+                )
+                return
+            changed = git("diff", "--name-only", before, "HEAD").stdout
+            if "requirements.txt" in changed:
+                subprocess.run(
+                    [os.path.join(REPO_DIR, ".venv", "bin", "pip"),
+                     "install", "-r",
+                     os.path.join(REPO_DIR, "requirements.txt")],
+                    capture_output=True, timeout=600,
+                )
+            summary = git("log", "-1", "--format=%s", "HEAD").stdout.strip()
+            self._notify(
+                "Flow Local updated - restarting…", f"Now on: {summary}"[:140]
+            )
+            time.sleep(2.5)  # let the toast render before the restart
+            self._restart_pending = True
+        except Exception as e:
+            self._notify("Update check failed", str(e)[:140])
 
     def on_restart(self, _item):
         """Quit and come back fresh - the cure for a glitched session.

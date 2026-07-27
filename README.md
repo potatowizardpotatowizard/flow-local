@@ -19,8 +19,13 @@ is in front. Email, Slack, docs, code review comments, anywhere.
   improves with use.
 - ↩️ **"Scratch that"**: say it to erase the last dictation.
 - 🔁 **Slip-of-the-tongue fixes**: "meet at five. I mean six" types
-  "meet at six". Works for numbers, times, and names; the
-  discourse-marker use ("I mean, that's wild") is never touched.
+  "meet at six" - also "no wait", "I meant to say", "make that",
+  "sorry", and repeated little words ("at five, I mean, at six").
+  Works for numbers, times, and names; the discourse-marker use
+  ("I mean, that's wild") is never touched.
+- 💬 **Spoken quotes**: say "quote … end quote" (or "unquote") and get
+  real, correctly spaced quotation marks. Noun uses ("I got a quote for
+  the job") stay literal.
 - 📋 **Nowhere to type? Clipboard.** Dictate with no text field focused
   (say, from the desktop) and the text lands on your clipboard with a
   notification, instead of vanishing into nowhere.
@@ -96,9 +101,11 @@ Good to know, so nothing surprises you:
 |---|---|
 | Dictate | Hold **Right Option**, speak, release |
 | Hands-free mode | **Double-tap** Right Option to lock recording on (icon shows 🔴🔒); tap once to stop and transcribe |
-| Erase last dictation | Say **"scratch that"** (or "delete that") |
-| Correct yourself mid-sentence | "…at five. **I mean** six" — the correction wins |
+| Erase last dictation | Say **"scratch that"** ("delete that", "undo that", "erase that", "I didn't mean to say that") |
+| Correct yourself mid-sentence | "…at five, **I mean**, at six" — also "no wait", "I meant to say", "make that", "sorry" |
+| Dictate quotation marks | "she said **quote** I'll be there **end quote**" → she said "I'll be there" |
 | Spoken punctuation | Say "comma", "period", "question mark", "new line", "new paragraph", etc. |
+| Update to the latest version | Menu bar 🎙 → **Check for Updates** (pulls from your git remote, restarts itself) |
 | Re-copy an old dictation | Menu bar 🎙 → **History** → click an entry (copies to clipboard) |
 | Switch model | Menu bar 🎙 → **Model** (downloads on first use, no restart needed) |
 | Change settings | Menu bar 🎙 → **Open Settings file**, edit, then **Reload settings** |
@@ -138,7 +145,8 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `auto_learn_vocabulary` | `true` | Mine each dictation for unusual words (not in the system dictionary) and remember them in `learned_words.json`. Words seen twice get hinted to the local speech model alongside `vocabulary`; "scratch that" un-learns the erased text. Set `false` to only use the manual list. |
 | `learn_from_edits` | `true` | Watch the ~30s after each dictation for backspace-and-retype fixes and turn them into `corrections` rules (with a notification). Guarded: clicks, arrow keys, and app switches cancel it; long rephrasings and single common-word swaps ("there" → "their") are never learned. Menu bar app only. |
 | `corrections` | `{}` | Forced post-fixes, e.g. `{"cloud code": "Claude Code"}`. Case-insensitive, whole words. |
-| `self_corrections` | `true` | Resolve "X, I mean Y" slips by keeping Y ("at five. I mean six" → "at six"). Deliberately conservative: only fires when X and Y look alike (two numbers/times or two capitalized names). |
+| `self_corrections` | `true` | Resolve "X, I mean Y" slips by keeping Y ("at five. I mean six" → "at six"; markers: "I mean(t)", "I meant to say", "no wait", "make that", "sorry", "actually"). Deliberately conservative: only fires when X and Y look alike (two numbers/times or two capitalized names). |
+| `check_updates_on_launch` | `false` | Check the git remote for a newer version at startup and show a notification if one exists (never installs by itself). Off by default so the app makes zero network requests unless asked. |
 
 `config.json` and `learned_words.json` are `.gitignore`d because they
 accumulate personal names and vocabulary; a fresh clone regenerates
@@ -215,6 +223,27 @@ What you give up: accuracy beyond what local Whisper models offer (medium.en
 is good, not magical), AI-powered rewriting/formatting, per-app tone,
 multi-language auto-detection, mobile keyboards, and someone to email when
 it breaks. If dictation is mission-critical for you, try both.
+
+## Updating
+
+The .app is a thin launcher that runs the code straight out of this
+folder, so updating is just updating the folder - no reinstall, and
+macOS permissions are untouched.
+
+- **Easiest**: menu bar 🎙 → **Check for Updates**. It pulls the latest
+  from your git remote, reinstalls dependencies if `requirements.txt`
+  changed, and restarts itself. Your `config.json` and learned words are
+  never touched (they're gitignored).
+- **By hand**: `cd ~/flow-local && git pull`, then 🎙 → Restart Flow
+  Local.
+- **Optional**: set `check_updates_on_launch` to `true` in config.json
+  to get a notification at startup when an update exists (it never
+  installs on its own - and note this is the one setting that makes a
+  network request, to your git remote only).
+
+Sharing it: a friend who installed from a clone of your GitHub fork
+updates the same two ways - their "Check for Updates" pulls from
+whatever remote they cloned.
 
 ## Uninstalling
 
