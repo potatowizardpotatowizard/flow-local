@@ -21,3 +21,7 @@ icon.icns
 # Local-only companion experiments - never publish these
 flowmaxxing/
 pinch_poc.py
+
+# Local tooling and scratch - never commit
+.claude/
+_to_delete/
