@@ -95,6 +95,11 @@ DEFAULT_SETTINGS = {
     # Forced fixes applied after transcription (case-insensitive match).
     # Example: {"cloud code": "Claude Code"}
     "corrections": {},
+    # Fix slips of the tongue: "meet at five. I mean six" -> "meet at six".
+    # Conservative on purpose - it only swaps when the words on both sides
+    # of "I mean" look like the same kind of thing (two numbers/times, or
+    # two capitalized names), so "I mean, that's wild" is never touched.
+    "self_corrections": True,
     # When no text field is focused (e.g. you're just on the desktop),
     # keep the dictation on the clipboard and show a notification instead
     # of typing into nowhere. Set false to always attempt the paste.
@@ -221,6 +226,10 @@ def clean_text(text, settings=None):
     # Collapse immediate word repetitions left by hesitations ("the the report")
     text = re.sub(r"\b(\w+)(\s+\1)+\b", r"\1", text, flags=re.IGNORECASE)
 
+    # Slip-of-the-tongue fixes: "meet at five. I mean six" -> "meet at six"
+    if s.get("self_corrections", True):
+        text = apply_self_corrections(text)
+
     # Collapse runs of whitespace
     text = re.sub(r"\s+", " ", text)
 
@@ -254,6 +263,55 @@ def clean_text(text, settings=None):
         text = re.sub(r"(\n+)([a-z])", _cap, text)
 
     return text
+
+
+# ── Self-corrections ("meet at five. I mean six" -> "meet at six") ──────
+
+_NUMBER_WORDS = {
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+    "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty",
+    "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred",
+    "thousand", "million", "noon", "midnight",
+}
+
+
+def _is_numberish(word):
+    """A number word, digit string, or clock time ("five", "5", "5:30pm")."""
+    w = word.lower().strip("'-")
+    return w in _NUMBER_WORDS or bool(re.fullmatch(r"\d[\d:]*(?:am|pm)?", w))
+
+
+def _is_nameish(word):
+    """A single capitalized word ("Tuesday", "Benjamin")."""
+    return word[:1].isupper() and word[1:].islower() and word.isalpha()
+
+
+def apply_self_corrections(text):
+    """Resolve "X, I mean Y" slips by keeping Y and dropping X.
+
+    Only fires when X and Y look like the same kind of thing - both
+    numbers/times or both capitalized names - so the discourse-marker use
+    of "I mean" ("I mean, that's wild") and corrections we can't safely
+    scope ("that's crazy. I mean it's wild") pass through unchanged.
+    """
+    token = r"[A-Za-z0-9][A-Za-z0-9:'-]*"
+
+    def _swap(match):
+        before, after = match.group(1), match.group(2)
+        if before.lower() != after.lower() and (
+            (_is_numberish(before) and _is_numberish(after))
+            or (_is_nameish(before) and _is_nameish(after))
+        ):
+            return after
+        return match.group(0)
+
+    return re.sub(
+        r"(" + token + r")\s*[,.;!?]*\s+I mean[t]?,?\s+(" + token + r")",
+        _swap,
+        text,
+        flags=re.IGNORECASE,
+    )
 
 
 def apply_corrections(text, corrections):
@@ -566,13 +624,33 @@ def show_notification(title, message):
     )
 
 
+# kAXErrorNoValue: the "focused element" attribute exists but has no value,
+# i.e. macOS is POSITIVE that nothing has keyboard focus.
+_AX_NO_VALUE = -25212
+
+# Roles that are definitely not text input. Everything not listed here is
+# given the benefit of the doubt, because many apps (Electron/web apps
+# especially) report vague roles for perfectly good chat boxes.
+_NON_EDITABLE_ROLES = {
+    "AXButton", "AXCheckBox", "AXRadioButton", "AXPopUpButton",
+    "AXMenuButton", "AXMenuItem", "AXMenuBar", "AXStaticText", "AXImage",
+    "AXScrollArea", "AXOutline", "AXTable", "AXList", "AXRow", "AXCell",
+    "AXColumn", "AXToolbar", "AXLink", "AXSlider", "AXTabGroup",
+    "AXDisclosureTriangle", "AXProgressIndicator", "AXSplitter",
+}
+
+
 def focused_element_is_editable():
     """Whether keyboard focus is in something that accepts typed text.
 
-    Uses the Accessibility API: a real text field/area role counts, and so
-    does any focused element whose value can be written. Returns True when
-    it can't tell, so dictation behaves as before (types) rather than
-    silently diverting to the clipboard.
+    Biased toward typing: dictation only diverts to the clipboard when
+    macOS positively reports that nothing has focus, or the focused
+    element has a role that is clearly not text input (a button, a file
+    list, the desktop). Vague roles, unknown roles, and any Accessibility
+    errors all mean "type as usual" - lots of apps (Electron/web apps in
+    particular) describe their chat boxes vaguely or not at all, and
+    diverting those to the clipboard on every dictation is far worse than
+    occasionally typing into a non-field (which is a no-op).
     """
     try:
         from AppKit import NSWorkspace
@@ -587,13 +665,15 @@ def focused_element_is_editable():
             return True
         app = AXUIElementCreateApplication(front.processIdentifier())
         err, focused = AXUIElementCopyAttributeValue(app, "AXFocusedUIElement", None)
+        if err == _AX_NO_VALUE or (err == 0 and focused is None):
+            return False  # macOS is sure: nothing focused (desktop, empty space)
         if err != 0 or focused is None:
-            return False  # nothing focused at all - desktop, empty space
+            return True  # can't tell - type as usual
         err, role = AXUIElementCopyAttributeValue(focused, "AXRole", None)
-        if err == 0 and role in (
-            "AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"
-        ):
-            return True
+        if err != 0 or role not in _NON_EDITABLE_ROLES:
+            return True  # editable, vague, or unknown - type as usual
+        # A clearly non-text role can still be editable in some apps
+        # (e.g. a renameable list cell) - honor a writable AXValue.
         err, settable = AXUIElementIsAttributeSettable(focused, "AXValue", None)
         return err == 0 and bool(settable)
     except Exception:
@@ -975,7 +1055,8 @@ class FlowEngine:
         if inserted is None:
             self._fail(
                 "macOS blocked the paste - enable Accessibility permission "
-                "for Flow Local (or Terminal), then try again."
+                "for Flow Local (or Terminal), then try again. Your text is "
+                "still on the clipboard: press ⌘V to paste it."
             )
             return
 

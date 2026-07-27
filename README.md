@@ -18,6 +18,9 @@ is in front. Email, Slack, docs, code review comments, anywhere.
   back to the local speech model, so recognition of *your* vocabulary
   improves with use.
 - ↩️ **"Scratch that"**: say it to erase the last dictation.
+- 🔁 **Slip-of-the-tongue fixes**: "meet at five. I mean six" types
+  "meet at six". Works for numbers, times, and names; the
+  discourse-marker use ("I mean, that's wild") is never touched.
 - 📋 **Nowhere to type? Clipboard.** Dictate with no text field focused
   (say, from the desktop) and the text lands on your clipboard with a
   notification, instead of vanishing into nowhere.
@@ -94,6 +97,7 @@ Good to know, so nothing surprises you:
 | Dictate | Hold **Right Option**, speak, release |
 | Hands-free mode | **Double-tap** Right Option to lock recording on (icon shows 🔴🔒); tap once to stop and transcribe |
 | Erase last dictation | Say **"scratch that"** (or "delete that") |
+| Correct yourself mid-sentence | "…at five. **I mean** six" — the correction wins |
 | Spoken punctuation | Say "comma", "period", "question mark", "new line", "new paragraph", etc. |
 | Re-copy an old dictation | Menu bar 🎙 → **History** → click an entry (copies to clipboard) |
 | Switch model | Menu bar 🎙 → **Model** (downloads on first use, no restart needed) |
@@ -134,6 +138,7 @@ defaults on first run. Edit it (menu → Open Settings file), then use
 | `auto_learn_vocabulary` | `true` | Mine each dictation for unusual words (not in the system dictionary) and remember them in `learned_words.json`. Words seen twice get hinted to the local speech model alongside `vocabulary`; "scratch that" un-learns the erased text. Set `false` to only use the manual list. |
 | `learn_from_edits` | `true` | Watch the ~30s after each dictation for backspace-and-retype fixes and turn them into `corrections` rules (with a notification). Guarded: clicks, arrow keys, and app switches cancel it; long rephrasings and single common-word swaps ("there" → "their") are never learned. Menu bar app only. |
 | `corrections` | `{}` | Forced post-fixes, e.g. `{"cloud code": "Claude Code"}`. Case-insensitive, whole words. |
+| `self_corrections` | `true` | Resolve "X, I mean Y" slips by keeping Y ("at five. I mean six" → "at six"). Deliberately conservative: only fires when X and Y look alike (two numbers/times or two capitalized names). |
 
 `config.json` and `learned_words.json` are `.gitignore`d because they
 accumulate personal names and vocabulary; a fresh clone regenerates
@@ -146,7 +151,14 @@ leave your Mac, and can be opened, edited, or deleted anytime.
   wrong (mic unavailable, model download failed, paste blocked, broken
   config.json).
 - **Nothing types, but History shows the text**: Accessibility permission
-  is missing, or the app needs one restart after you granted it.
+  is missing, or the app needs one restart after you granted it. (Either
+  way the text is on your clipboard - ⌘V pastes it.)
+- **It copies to the clipboard even though you're in a chat box**: fixed -
+  the focus check now only diverts to the clipboard when macOS positively
+  reports nothing focused or a clearly non-text control (a button, a file
+  list, the desktop). Apps that describe their text boxes vaguely (many
+  chat and web apps) get typed into as normal. If you still see it in
+  some app, set `copy_when_no_text_field` to `false` to always type.
 - **Hotkey does nothing**: Accessibility permission (Input Monitoring for
   terminal mode). Also check `hotkey` in config.json is a supported name.
 - **"no speech detected"**: Microphone permission, or the wrong input
